@@ -74,10 +74,22 @@ class PropertyTree:
             if isinstance(value, dict):
                 # Nested dictionary - recurse
                 element.elements.extend(PropertyTree.to_protobuf(value))
-            elif isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
-                # List of dictionaries (e.g., multiple inputs/outputs)
-                for item in value:
-                    element.elements.extend(PropertyTree.to_protobuf(item))
+            elif isinstance(value, list):
+                # List - handle as repeated elements
+                if len(value) == 0:
+                    # Empty list - create element with no value/children
+                    pass
+                elif isinstance(value[0], dict):
+                    # List of dictionaries (e.g., multiple inputs/outputs)
+                    for item in value:
+                        element.elements.extend(PropertyTree.to_protobuf(item))
+                else:
+                    # List of primitive values - create child elements
+                    for idx, item in enumerate(value):
+                        child = pb.PropertyElement()
+                        child.name = str(idx)
+                        PropertyTree._set_value(child.value, item)
+                        element.elements.append(child)
             else:
                 # Leaf value
                 PropertyTree._set_value(element.value, value)
