@@ -245,8 +245,8 @@ class Vdc:
         # self._load_vdsds()
         
         logger.info(
-            f"vDC initialized: name='{self._common_props.get('name')}', "
-            f"model='{self._common_props.get('model')}', "
+            f"vDC initialized: name='{self._common_props.get_property('name')}', "
+            f"model='{self._common_props.get_property('model')}', "
             f"devices={len(self._vdsds)}"
         )
     
@@ -653,6 +653,6 @@ class Vdc:
         """String representation of vDC."""
         return (
             f"Vdc(dsuid='{self.dsuid}', "
-            f"name='{self._common_props.get('name')}', "
+            f"name='{self._common_props.get_property('name')}', "
             f"devices={len(self._vdsds)})"
         )
