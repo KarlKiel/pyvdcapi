@@ -98,11 +98,14 @@ class ServiceAnnouncer:
     
     async def _start_zeroconf_async(self) -> bool:
         """Start announcement using zeroconf library (async version)."""
+        print("ZZZZZ ENTERING _start_zeroconf_async", flush=True)
         logger.debug(">>>  ENTERING _start_zeroconf_async")
         try:
+            print("ZZZZZ Importing zeroconf", flush=True)
             logger.debug(">>> Importing zeroconf modules")
             from zeroconf import ServiceInfo
             from zeroconf.asyncio import AsyncZeroconf
+            print("ZZZZZ Import successful", flush=True)
             logger.debug(">>> Import successful")
         except ImportError:
             logger.error(
@@ -112,9 +115,11 @@ class ServiceAnnouncer:
             return False
         
         try:
+            print("ZZZZZ Getting addresses", flush=True)
             logger.debug(">>> Getting local addresses")
             # Get local IP address
             addresses = self._get_local_addresses()
+            print(f"ZZZZZ Got addresses: {addresses}", flush=True)
             logger.debug(f">>> Got addresses: {addresses}")
             if not addresses:
                 logger.error("No network addresses found for service announcement")
