@@ -605,11 +605,12 @@ class VdcHost:
         logger.debug("Received Ping from vdSM, sending Pong")
         
         if self._session:
-            return await self._session.on_ping_received()
+            return await self._session.on_ping_received(message)
         
         # If no session, still respond with Pong
         response = Message()
-        response.type = Message.VDC_SEND_PONG
+        response.type = VDC_SEND_PONG
+        response.message_id = message.message_id
         return response
     
     def _handle_pong(self, message: Message) -> None:

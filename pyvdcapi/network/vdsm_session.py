@@ -259,12 +259,15 @@ class VdSMSession:
         
         logger.info("vdSM session now ACTIVE")
     
-    async def on_ping_received(self) -> Message:
+    async def on_ping_received(self, ping_message: Message) -> Message:
         """
         Handle Ping message from vdSM.
         
         The vDC API uses Ping/Pong for keepalive and connectivity testing.
         When a Ping is received, we must respond with Pong.
+        
+        Args:
+            ping_message: The received Ping message
         
         Returns:
             Pong message to send back
@@ -272,9 +275,10 @@ class VdSMSession:
         self.last_activity = time.time()
         logger.debug("Received Ping, sending Pong")
         
-        # Create Pong response
+        # Create Pong response with same message ID
         message = Message()
         message.type = VDC_SEND_PONG
+        message.message_id = ping_message.message_id
         
         return message
     
