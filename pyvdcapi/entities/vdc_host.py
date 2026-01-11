@@ -328,7 +328,7 @@ class VdcHost:
         
         # Start service announcement if enabled
         if self._service_announcer:
-            success = self._service_announcer.start()
+            success = await self._service_announcer.start()
             if success:
                 logger.info(f"Service announcement started: _ds-vdc._tcp on port {self.port}")
             else:
@@ -383,7 +383,7 @@ class VdcHost:
         
         # Stop service announcement
         if self._service_announcer:
-            self._service_announcer.stop()
+            await self._service_announcer.stop()
             logger.info("Service announcement stopped")
         
         # Stop TCP server

@@ -61,7 +61,7 @@ class ServiceAnnouncer:
         
         self._running = False
         
-    def start(self) -> bool:
+    async def start(self) -> bool:
         """
         Start announcing the vDC host service.
         
@@ -76,12 +76,12 @@ class ServiceAnnouncer:
             if self.use_avahi:
                 return self._start_avahi()
             else:
-                return self._start_zeroconf()
+                return await self._start_zeroconf_async()
         except Exception as e:
             logger.error(f"Failed to start service announcement: {e}", exc_info=True)
             return False
     
-    def stop(self):
+    async def stop(self):
         """Stop announcing the vDC host service."""
         if not self._running:
             return
@@ -90,18 +90,17 @@ class ServiceAnnouncer:
             if self.use_avahi:
                 self._stop_avahi()
             else:
-                self._stop_zeroconf()
+                await self._stop_zeroconf_async()
         except Exception as e:
             logger.error(f"Error stopping service announcement: {e}")
         finally:
             self._running = False
     
-    def _start_zeroconf(self) -> bool:
-        """Start announcement using zeroconf library."""
+    async def _start_zeroconf_async(self) -> bool:
+        """Start announcement using zeroconf library (async version)."""
         try:
-            from zeroconf import ServiceInfo, Zeroconf
+            from zeroconf import ServiceInfo
             from zeroconf.asyncio import AsyncZeroconf
-            import asyncio
         except ImportError:
             logger.error(
                 "zeroconf library not installed. "
@@ -127,12 +126,9 @@ class ServiceAnnouncer:
             )
             
             # Start AsyncZeroconf and register service
-            # We need to run this in the event loop
-            loop = asyncio.get_event_loop()
-            self._zeroconf = loop.run_until_complete(self._async_start_zeroconf())
-            
-            if not self._zeroconf:
-                return False
+            self._zeroconf = AsyncZeroconf()
+            await self._zeroconf.async_register_service(self._service_info)
+            logger.debug("Registered service with AsyncZeroconf")
             
             self._running = True
             logger.info(
@@ -142,44 +138,27 @@ class ServiceAnnouncer:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to start zeroconf announcement: {e}")
+            logger.error(f"Failed to start zeroconf announcement: {e}", exc_info=True)
             if self._zeroconf:
                 try:
-                    loop = asyncio.get_event_loop()
-                    loop.run_until_complete(self._zeroconf.async_close())
+                    await self._zeroconf.async_close()
                 except Exception:
                     pass
                 self._zeroconf = None
             return False
     
-    async def _async_start_zeroconf(self):
-        """Async helper to start zeroconf."""
-        from zeroconf.asyncio import AsyncZeroconf
-        
-        aiozc = AsyncZeroconf()
-        await aiozc.async_register_service(self._service_info)
-        logger.debug("Registered service with AsyncZeroconf")
-        return aiozc
-    
-    def _stop_zeroconf(self):
-        """Stop zeroconf announcement."""
+    async def _stop_zeroconf_async(self):
+        """Stop zeroconf announcement (async version)."""
         if self._zeroconf and self._service_info:
             try:
-                import asyncio
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(self._async_stop_zeroconf())
+                await self._zeroconf.async_unregister_service(self._service_info)
+                await self._zeroconf.async_close()
                 logger.info("Unregistered mDNS service")
             except Exception as e:
                 logger.error(f"Error unregistering service: {e}")
             finally:
                 self._zeroconf = None
                 self._service_info = None
-    
-    async def _async_stop_zeroconf(self):
-        """Async helper to stop zeroconf."""
-        if self._zeroconf and self._service_info:
-            await self._zeroconf.async_unregister_service(self._service_info)
-            await self._zeroconf.async_close()
     
     def _start_avahi(self) -> bool:
         """Start announcement using Avahi daemon."""
