@@ -68,7 +68,8 @@ class PropertyTree:
         
         for key, value in data.items():
             element = pb.PropertyElement()
-            element.name = key
+            # Ensure key is always a string (protobuf requirement)
+            element.name = str(key) if not isinstance(key, str) else key
             
             if isinstance(value, dict):
                 # Nested dictionary - recurse

@@ -451,7 +451,7 @@ class Output:
             'outputMode': self.output_mode,
             'pushChanges': self.push_changes,
             'channels': {
-                str(channel_type.value): channel.to_dict()
+                str(channel_type): channel.to_dict()
                 for channel_type, channel in self.channels.items()
             }
         }
