@@ -260,13 +260,18 @@ class VdSD:
             self._persistence.set_vdsd(self.dsuid, vdsd_config)
         
         # Common properties (dSUID, name, model, etc.)
+        # Extract explicitly handled properties to avoid duplicates
+        extra_props = {k: v for k, v in vdsd_config.items() 
+                      if k not in ['name', 'model', 'model_uid', 'model_version', 'primary_group', 'enumeration', 'type', 'dSUID']}
+        
         self._common_props = CommonProperties(
             dsuid=self.dsuid,
             entity_type='vDSD',
             name=name,
             model=model,
+            model_uid=model_uid,
             model_version=model_version if model_version else "",
-            **vdsd_config
+            **extra_props
         )
         
         # vdSD-specific properties (primaryGroup, modelFeatures, etc.)

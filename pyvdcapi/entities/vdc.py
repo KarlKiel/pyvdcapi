@@ -206,6 +206,10 @@ class Vdc:
             self._persistence.set_vdc(self.dsuid, vdc_config)
         
         # Common properties (dSUID, name, model, etc.)
+        # Extract explicitly handled properties to avoid duplicates
+        extra_props = {k: v for k, v in vdc_config.items() 
+                      if k not in ['name', 'model', 'model_uid', 'model_version', 'vendor_id', 'enumeration', 'type', 'dSUID']}
+        
         self._common_props = CommonProperties(
             dsuid=self.dsuid,
             entity_type='vDC',
@@ -213,7 +217,7 @@ class Vdc:
             model=vdc_config.get('model', model),
             model_uid=vdc_config.get('model_uid', model_uid),
             model_version=vdc_config.get('model_version', model_version) or "",
-            **vdc_config
+            **extra_props
         )
         
         # vDC-specific properties (implementationId, zoneID, capabilities)

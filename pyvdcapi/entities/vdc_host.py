@@ -248,6 +248,10 @@ class VdcHost:
         
         # Common properties (dSUID, name, model, etc.)
         # Use constructor parameters as defaults if not in persisted config
+        # Extract explicitly handled properties from host_config to avoid duplicates
+        extra_props = {k: v for k, v in host_config.items() 
+                      if k not in ['name', 'model', 'model_uid', 'model_version', 'vendor_id', 'api_version']}
+        
         self._common_props = CommonProperties(
             dsuid=self.dsuid,
             entity_type='vDChost',
@@ -255,7 +259,7 @@ class VdcHost:
             model=host_config.get('model', model),
             model_uid=host_config.get('model_uid', model_uid),
             model_version=host_config.get('model_version', model_version) or "",
-            **host_config
+            **extra_props
         )
         
         # vDC management
