@@ -697,12 +697,38 @@ class VdSD:
                 resolution=1.0
             )
         """
-        # Implementation depends on OutputChannel class
-        # This is a placeholder
-        logger.info(
-            f"Adding output channel type {channel_type} to vdSD {self.dsuid}"
+        from ..components.output_channel import OutputChannel
+        
+        # Create the output channel
+        channel = OutputChannel(
+            vdsd=self,
+            channel_type=channel_type,
+            min_value=min_value,
+            max_value=max_value,
+            resolution=resolution,
+            initial_value=initial_value,
+            **properties
         )
-        raise NotImplementedError("OutputChannel class not yet implemented")
+        
+        # Ensure we have an output container (outputID 0 by default)
+        output_id = properties.get('output_id', 0)
+        if output_id not in self._outputs:
+            from ..components.output import Output
+            self._outputs[output_id] = Output(
+                vdsd=self,
+                output_id=output_id,
+                output_function=properties.get('output_function', 'dimmer'),
+                output_mode=properties.get('output_mode', 'gradual')
+            )
+        
+        # Add channel to output
+        self._outputs[output_id].add_channel(channel)
+        
+        logger.info(
+            f"Added output channel type {channel_type} to vdSD {self.dsuid}"
+        )
+        
+        return channel
     
     def add_button(
         self,
@@ -752,9 +778,34 @@ class VdSD:
                 on_press=lambda: device.increase_brightness()
             )
         """
-        # Implementation depends on Button class
-        logger.info(f"Adding button '{name}' to vdSD {self.dsuid}")
-        raise NotImplementedError("Button class not yet implemented")
+        from ..components.button import Button
+        
+        # Auto-assign button ID based on existing buttons
+        button_id = properties.get('button_id', len(self._buttons))
+        
+        # Create the button
+        button = Button(
+            vdsd=self,
+            name=name,
+            button_type=button_type,
+            button_id=button_id
+        )
+        
+        # Register callbacks if provided
+        if on_press:
+            button.on_press(on_press)
+        if on_release:
+            button.on_release(on_release)
+        
+        # Add to device's button list
+        self._buttons.append(button)
+        
+        logger.info(
+            f"Added button '{name}' (id={button_id}, type={button_type}) "
+            f"to vdSD {self.dsuid}"
+        )
+        
+        return button
     
     def add_sensor(
         self,
@@ -796,9 +847,36 @@ class VdSD:
             # Update sensor value from hardware
             temp_sensor.update_value(22.5)  # Room temperature
         """
-        # Implementation depends on Sensor class
-        logger.info(f"Adding sensor type '{sensor_type}' to vdSD {self.dsuid}")
-        raise NotImplementedError("Sensor class not yet implemented")
+        from ..components.sensor import Sensor
+        
+        # Auto-assign sensor ID based on existing sensors
+        sensor_id = properties.get('sensor_id', len(self._sensors))
+        
+        # Get sensor name from properties or generate from type
+        sensor_name = properties.get('name', f"{sensor_type.capitalize()} Sensor")
+        
+        # Create the sensor
+        sensor = Sensor(
+            vdsd=self,
+            name=sensor_name,
+            sensor_type=sensor_type,
+            unit=unit,
+            sensor_id=sensor_id,
+            min_value=min_value,
+            max_value=max_value,
+            resolution=properties.get('resolution', 0.1),
+            initial_value=properties.get('initial_value')
+        )
+        
+        # Add to device's sensor list
+        self._sensors.append(sensor)
+        
+        logger.info(
+            f"Added sensor '{sensor_name}' (type={sensor_type}, unit={unit}) "
+            f"to vdSD {self.dsuid}"
+        )
+        
+        return sensor
     
     def set_scene(
         self,

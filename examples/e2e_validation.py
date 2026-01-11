@@ -130,61 +130,34 @@ def validate_complex_device_creation(vdc):
     assert isinstance(device_vdsd_props['modelFeatures'], dict), "modelFeatures must be dict"
     logger.info("✓ Device properties validated")
     
-    # Add output with channel
-    logger.info("\n2.2 Adding output with brightness channel...")
-    output = device.create_output(
-        output_function=DSOutputFunction.DIMMER,
-        output_usage=0,
-        variable_ramp=True,
-        max_power=100.0
-    )
-    
-    channel = output.create_channel(
+    # Add output channels
+    logger.info("\n2.2 Adding output channel (brightness)...")
+    brightness_channel = device.add_output_channel(
         channel_type=DSChannelType.BRIGHTNESS,
         min_value=0.0,
         max_value=100.0,
         resolution=0.1,
-        default_value=50.0
+        initial_value=50.0
     )
-    logger.info(f"✓ Output created with function: {output.output_function}")
-    logger.info(f"✓ Channel created: type={channel.channel_type}, min={channel.min}, max={channel.max}")
+    logger.info(f"✓ Brightness channel created: type={brightness_channel.channel_type}")
     
     # Add button
     logger.info("\n2.3 Adding button input...")
-    button = device.create_button(
-        input_id=0,
-        button_type=1,  # Single pushbutton
-        element_id=0,
-        button_id=1,
-        local_button=False,
-        group=DSGroup.YELLOW,
-        mode=0
+    button = device.add_button(
+        name="Toggle Button",
+        button_type=0  # Single press
     )
-    logger.info(f"✓ Button created: id={button.input_id}, type={button.button_type}")
-    
-    # Add binary input
-    logger.info("\n2.4 Adding binary input...")
-    binary_input = device.create_binary_input(
-        input_id=1,
-        input_type=DSBinaryInputFunction.PRESENCE,
-        input_usage=0,
-        group=DSGroup.YELLOW,
-        min_push_interval=0.5
-    )
-    logger.info(f"✓ Binary input created: id={binary_input.input_id}, type={binary_input.input_type}")
+    logger.info(f"✓ Button created: id={button.button_id}, name='{button.name}'")
     
     # Add sensor
-    logger.info("\n2.5 Adding sensor input...")
-    sensor = device.create_sensor(
-        input_id=2,
-        sensor_type=DSSensorType.TEMPERATURE,
-        sensor_usage=DSSensorUsage.ROOM,
+    logger.info("\n2.4 Adding sensor input...")
+    sensor = device.add_sensor(
+        sensor_type="temperature",
+        unit="°C",
         min_value=-40.0,
-        max_value=80.0,
-        resolution=0.1,
-        update_interval=60.0
+        max_value=80.0
     )
-    logger.info(f"✓ Sensor created: id={sensor.input_id}, type={sensor.sensor_type}")
+    logger.info(f"✓ Sensor created: id={sensor.sensor_id}, type={sensor.sensor_type}")
     
     return device
 
