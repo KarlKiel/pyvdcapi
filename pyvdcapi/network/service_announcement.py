@@ -165,10 +165,12 @@ class ServiceAnnouncer:
             # Advertise both uppercase and lowercase keys for compatibility.
             # Some resolvers (and the original Avahi-based DSS) expect 'dSUID'
             # using that exact capitalization. Provide both to be safe.
-            # Use bytes for keys/values to ensure zeroconf advertises them correctly
+            # Use string keys/values so zeroconf and Avahi enumerate TXT records
+            # in a human-readable form that other clients (avahi-browse, dns-sd)
+            # will display correctly.
             txt_records = {
-                b'dSUID': self.dsuid.encode('utf-8'),
-                b'dsuid': self.dsuid.encode('utf-8')  # compatibility: some resolvers use lowercase
+                'dSUID': self.dsuid,
+                'dsuid': self.dsuid  # compatibility: some resolvers use lowercase
             }
             
             self._service_info = ServiceInfo(
