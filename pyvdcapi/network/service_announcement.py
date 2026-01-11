@@ -138,7 +138,7 @@ class ServiceAnnouncer:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to start zeroconf announcement: {e}", exc_info=True)
+            logger.error(f"Failed to start zeroconf announcement: {type(e).__name__}: {e}", exc_info=True)
             if self._zeroconf:
                 try:
                     await self._zeroconf.async_close()
