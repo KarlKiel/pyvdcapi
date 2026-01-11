@@ -48,9 +48,10 @@ The session manager:
 import asyncio
 import time
 import logging
+import random
 from enum import Enum
 from typing import Optional, Callable, Awaitable
-from proto.genericVDC_pb2 import Message, VDC_RESPONSE_HELLO, VDC_SEND_PONG, VDC_SEND_PONG
+from proto.genericVDC_pb2 import Message, VDC_RESPONSE_HELLO
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,8 @@ class VdSMSession:
         self._ping_task: Optional[asyncio.Task] = None
         self._pong_received = asyncio.Event()
         self._hello_timer: Optional[asyncio.Task] = None
+        # Track last ping id for correlation with incoming Pong
+        self._last_ping_id: Optional[int] = None
     
     async def on_connected(self, writer: asyncio.StreamWriter) -> None:
         """
@@ -286,16 +289,20 @@ class VdSMSession:
         
         return message
     
-    def on_pong_received(self) -> None:
+    def on_pong_received(self, pong_message: Message) -> None:
         """
         Handle Pong message from vdSM.
-        
-        Pong is a response to our Ping. This confirms the connection
-        is still alive and responsive.
+
+        Pong is a response to our Ping. We only treat it as a response
+        to our outstanding Ping if the message_id matches the last ping id.
         """
         self.last_activity = time.time()
-        self._pong_received.set()  # Signal that pong was received
-        logger.debug("Received Pong")
+        # If this Pong matches the last ping we sent, signal receipt
+        if self._last_ping_id is not None and pong_message.message_id == self._last_ping_id:
+            self._pong_received.set()
+            logger.debug("Received Pong matching last ping id %s", self._last_ping_id)
+        else:
+            logger.debug("Received Pong with id %s (no matching outstanding ping)", pong_message.message_id)
     
     async def on_bye_received(self, bye_message: Message) -> None:
         """
@@ -438,13 +445,18 @@ class VdSMSession:
                 logger.debug("Sending Ping to vdSM")
                 ping_message = Message()
                 ping_message.type = Message.VDC_SEND_PING
-                
+
+                # Assign a non-zero random message id for correlation
+                ping_message.message_id = random.getrandbits(31)
+                self._last_ping_id = ping_message.message_id
+
                 if self.writer:
                     from .tcp_server import TCPServer
-                    await TCPServer.send_message(self.writer, ping_message)
-                    
-                    # Wait for Pong with timeout
+                    # Clear previous pong event before sending a new ping
                     self._pong_received.clear()
+                    await TCPServer.send_message(self.writer, ping_message)
+
+                    # Wait for Pong with timeout
                     try:
                         await asyncio.wait_for(
                             self._pong_received.wait(),

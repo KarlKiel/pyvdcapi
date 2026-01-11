@@ -625,7 +625,8 @@ class VdcHost:
         logger.debug("Received Pong from vdSM")
         
         if self._session:
-            self._session.on_pong_received()
+            # Forward pong message to session for id-based correlation
+            self._session.on_pong_received(message)
     
     async def _handle_get_property(self, message: Message) -> Optional[Message]:
         """
