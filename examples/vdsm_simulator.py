@@ -38,7 +38,7 @@ from genericVDC_pb2 import (
     VDSM_REQUEST_GET_PROPERTY,
     VDC_RESPONSE_GET_PROPERTY,
     VDSM_REQUEST_GENERIC_REQUEST,
-    VDC_RESPONSE_GENERIC_REQUEST,
+    GENERIC_RESPONSE,
     VDC_SEND_ANNOUNCE_VDC,
     VDC_SEND_ANNOUNCE_DEVICE,
     VDSM_NOTIFICATION_CALL_SCENE,
@@ -312,7 +312,7 @@ class VdsmSimulator:
                 vdc_dsuids.append(dsuid)
                 logger.info(f"  ← Announced vDC: {dsuid}")
                 
-            elif response.type == VDC_RESPONSE_GENERIC_REQUEST:
+            elif response.type == GENERIC_RESPONSE:
                 # End of announcements
                 logger.info(f"✓ Discovery complete: {len(vdc_dsuids)} vDC(s) found")
                 break
@@ -395,7 +395,7 @@ class VdsmSimulator:
                     device_dsuids.append(dsuid)
                     logger.info(f"  ← Announced device: {dsuid}")
                     
-                elif response.type == VDC_RESPONSE_GENERIC_REQUEST:
+                elif response.type == GENERIC_RESPONSE:
                     # End of announcements
                     logger.info(f"✓ Discovery complete: {len(device_dsuids)} device(s) found")
                     break
