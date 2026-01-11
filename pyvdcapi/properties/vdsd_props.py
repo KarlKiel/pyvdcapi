@@ -144,8 +144,19 @@ class VdSDProperties:
         return False
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return self._properties.copy()
+        """
+        Convert to dictionary.
+        
+        Converts all enum values to their underlying types for serialization.
+        """
+        result = {}
+        for key, value in self._properties.items():
+            # Convert enum values to their underlying int/str type
+            if hasattr(value, 'value'):
+                result[key] = value.value
+            else:
+                result[key] = value
+        return result
     
     def get_primary_group(self) -> int:
         """Get primary group (dS class/color)."""
