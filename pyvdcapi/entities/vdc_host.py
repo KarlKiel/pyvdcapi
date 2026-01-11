@@ -366,6 +366,38 @@ class VdcHost:
         
         logger.info("vDC host stopped")
     
+    def save_config(self) -> None:
+        """
+        Save the complete vDC host configuration to persistence layer.
+        
+        This saves:
+        - Host common properties (name, model, etc.)
+        - All vDC configurations
+        - All vdSD configurations (via their respective vDCs)
+        
+        The save is typically automatic (when auto_save=True), but this
+        method can be called manually to force a save at any time.
+        
+        Example:
+            # Make changes to host
+            host._common_props.set('name', 'Updated Host Name')
+            
+            # Manually save all configurations
+            host.save_config()
+        """
+        # Save host configuration
+        host_config = {
+            'dSUID': self.dsuid,
+            'type': 'vDChost',
+            **self._common_props.to_dict()
+        }
+        self._persistence.set_vdc_host(host_config)
+        
+        # Force save to file
+        self._persistence.save()
+        
+        logger.info(f"Saved configuration for vDC host {self.dsuid}")
+    
     def _setup_message_handlers(self) -> None:
         """
         Register message handlers with the router.

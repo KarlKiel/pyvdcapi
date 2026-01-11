@@ -1671,3 +1671,37 @@ class VdSD:
         except RuntimeError:
             # No event loop, can't send notification
             logger.warning("No event loop available for push notification")
+    
+    def save(self) -> None:
+        """
+        Save device configuration to persistence layer.
+        
+        Persists current device state including:
+        - Common properties (name, model, etc.)
+        - Device-specific properties (primaryGroup, etc.)
+        - Component configurations (outputs, buttons, sensors)
+        - Scene configurations
+        
+        The configuration is saved to YAML via the persistence layer
+        and will be automatically reloaded on next initialization.
+        
+        Example:
+            # Modify device properties
+            device._common_props.set('name', 'Updated Name')
+            
+            # Save changes
+            device.save()
+        """
+        # Build configuration dict from current state
+        config = {
+            'dSUID': self.dsuid,
+            'type': 'vdSD',
+            'vdc_dSUID': self.vdc.dsuid,
+            **self._common_props.to_dict(),
+            **self._vdsd_props.to_dict()
+        }
+        
+        # Save to persistence
+        self._persistence.set_vdsd(self.dsuid, config)
+        
+        logger.info(f"Saved configuration for vdSD {self.dsuid}")
