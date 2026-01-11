@@ -2,6 +2,103 @@
 
 Mock virtualSTROM Manager for testing vDC implementations.
 
+## Environment Setup
+
+Before running the simulator or demos, you need to set up a Python environment with the required dependencies.
+
+### 1. Create a Virtual Environment
+
+It's recommended to use a virtual environment to isolate dependencies:
+
+```bash
+# Navigate to the repository root
+cd pyvdcapi
+
+# Create a virtual environment
+python3 -m venv venv
+
+# Activate the virtual environment
+# On Linux/Mac:
+source venv/bin/activate
+# On Windows:
+# venv\Scripts\activate
+```
+
+### 2. Install Dependencies
+
+The repository requires the following Python packages:
+
+```bash
+pip install protobuf pyyaml
+```
+
+### 3. Verify Installation
+
+Verify that the packages are installed correctly:
+
+```bash
+python3 -c "import google.protobuf; import yaml; print('Dependencies installed successfully!')"
+```
+
+If you see "Dependencies installed successfully!", you're ready to proceed.
+
+## Testing the Repository
+
+The easiest way to test the repository is to run the complete demo which creates a vDC host with sample devices and demonstrates the full protocol interaction.
+
+### Running the Complete Demo
+
+```bash
+# Make sure you're in the repository root and the virtual environment is activated
+python examples/demo_with_simulator.py
+```
+
+This demo will:
+1. Create a vDC host with 2 vDCs (lights and sensors)
+2. Create 3 devices (2 lights and 1 multi-sensor)
+3. Start the vDC host server on port 8444
+4. Connect the vdSM simulator to the host
+5. Perform full discovery of vDCs and devices
+6. Execute interactive test commands (set brightness, call scenes, save scenes)
+7. Display all protocol communication in real-time
+
+**Expected Output:**
+
+You should see output sections including:
+- ✅ `CREATING vDC HOST WITH DEMO DEVICES` - Device creation
+- ✅ `STARTING vDC HOST SERVER` - Server startup
+- ✅ `STARTING vdSM SIMULATOR` - Simulator connection
+- ✅ `RUNNING INTERACTIVE TEST COMMANDS` - Command execution
+- ✅ All protocol messages (Hello, Discovery, Commands, Responses)
+
+The demo runs for approximately 15 seconds and then stops automatically.
+
+### Troubleshooting
+
+**Problem:** `ModuleNotFoundError: No module named 'google'`
+```bash
+# Solution: Install protobuf
+pip install protobuf
+```
+
+**Problem:** `ModuleNotFoundError: No module named 'yaml'`
+```bash
+# Solution: Install pyyaml
+pip install pyyaml
+```
+
+**Problem:** Port 8444 already in use
+```bash
+# Solution: Stop any process using port 8444 or modify the port in demo_with_simulator.py
+lsof -i :8444  # Find process using the port
+```
+
+**Problem:** Connection refused
+```bash
+# Solution: Ensure the vDC host started successfully and you're connecting to the right host/port
+# Check the logs for "vDC host is running on port 8444"
+```
+
 ## Overview
 
 The vdSM simulator acts as a vdSM (virtual digitalSTROM Manager) client that can:
