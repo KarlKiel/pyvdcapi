@@ -78,7 +78,7 @@ class ServiceAnnouncer:
             else:
                 return self._start_zeroconf()
         except Exception as e:
-            logger.error(f"Failed to start service announcement: {e}")
+            logger.error(f"Failed to start service announcement: {e}", exc_info=True)
             return False
     
     def stop(self):
