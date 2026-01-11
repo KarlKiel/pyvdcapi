@@ -10,15 +10,52 @@ The dSUID format is 34 hex characters (2*17 bytes):
 import uuid
 import hashlib
 from typing import Optional
+from enum import Enum
+
+
+class DSUIDNamespace(Enum):
+    """Namespace identifiers for different entity types."""
+    VDCHOST = "00000000"
+    VDC = "00000001"
+    VDSD = "00000002"
 
 
 class DSUIDGenerator:
     """Generates dSUIDs according to digitalSTROM specifications."""
     
-    # Namespace identifiers for different entity types
+    # Legacy class constants for backward compatibility
     NAMESPACE_VDC_HOST = "00000000"
     NAMESPACE_VDC = "00000001"
     NAMESPACE_VDSD = "00000002"
+    
+    def __init__(self, mac_address: str, vendor_id: str = "KarlKiel"):
+        """
+        Initialize dSUID generator.
+        
+        Args:
+            mac_address: MAC address in format "AA:BB:CC:DD:EE:FF" or empty for auto-detect
+            vendor_id: Vendor identifier string
+        """
+        self.mac_address = mac_address
+        self.vendor_id = vendor_id
+    
+    def generate(self, namespace: DSUIDNamespace, enumeration: int = 0) -> str:
+        """
+        Generate a dSUID for the specified namespace.
+        
+        Args:
+            namespace: Entity type namespace (VDCHOST, VDC, VDSD)
+            enumeration: Subdevice enumeration (0-255)
+            
+        Returns:
+            34 character hex string (17 bytes)
+        """
+        return self._generate_dsuid(
+            namespace.value,
+            self.mac_address,
+            self.vendor_id,
+            enumeration
+        )
     
     @staticmethod
     def generate_vdc_host_dsuid(mac_address: str, vendor_id: str = "KarlKiel") -> str:

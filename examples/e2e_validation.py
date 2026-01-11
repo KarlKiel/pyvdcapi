@@ -28,8 +28,8 @@ from pyvdcapi.core.constants import (
     DSGroup,
     DSOutputFunction,
     DSChannelType,
-    DSButtonFunction,
-    DSBinaryInputType,
+    DSButtonType,
+    DSBinaryInputFunction,
     DSSensorType,
     DSSensorUsage
 )
@@ -166,7 +166,7 @@ def validate_complex_device_creation(vdc):
     logger.info("\n2.4 Adding binary input...")
     binary_input = device.create_binary_input(
         input_id=1,
-        input_type=DSBinaryInputType.PRESENCE,
+        input_type=DSBinaryInputFunction.PRESENCE,
         input_usage=0,
         group=DSGroup.YELLOW,
         min_push_interval=0.5
