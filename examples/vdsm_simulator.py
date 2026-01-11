@@ -44,7 +44,7 @@ from genericVDC_pb2 import (
     VDSM_NOTIFICATION_CALL_SCENE,
     VDSM_NOTIFICATION_SAVE_SCENE,
     VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE,
-    VDC_SEND_BYE
+    VDSM_SEND_BYE
 )
 
 # Set up logging
@@ -131,7 +131,7 @@ class VdsmSimulator:
             try:
                 # Send Bye message
                 bye_msg = Message()
-                bye_msg.type = VDC_SEND_BYE
+                bye_msg.type = VDSM_SEND_BYE
                 await self._send_message(bye_msg)
                 
                 self.writer.close()
