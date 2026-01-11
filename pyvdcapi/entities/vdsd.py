@@ -247,13 +247,15 @@ class VdSD:
         vdsd_config = self._persistence.get_vdsd(self.dsuid)
         if not vdsd_config:
             # First time - initialize with provided properties
+            # Convert enum to value for YAML serialization
+            primary_group_value = primary_group.value if hasattr(primary_group, 'value') else primary_group
             vdsd_config = {
                 'dSUID': self.dsuid,
                 'type': 'vDSD',
                 'vdc_dSUID': vdc.dsuid,  # Link to parent vDC
                 'name': name,
                 'model': model,
-                'primaryGroup': primary_group,
+                'primaryGroup': primary_group_value,
                 'enumeration': enumeration,
                 **properties
             }
