@@ -214,18 +214,22 @@ class VdSMSession:
         
         logger.info(f"Received Hello from vdSM version {self.vdsm_version}")
     
-    def create_hello_response(self) -> Message:
+    def create_hello_response(self, request_message: Message) -> Message:
         """
         Create Hello response message to send to vdSM.
         
         The vDC host must respond to Hello with its own Hello message
         containing the vDC host dSUID. This completes the handshake.
         
+        Args:
+            request_message: The Hello request message (to copy message_id from)
+        
         Returns:
             Message with vdc_ResponseHello containing host dSUID
         """
         message = Message()
         message.type = VDC_RESPONSE_HELLO
+        message.message_id = request_message.message_id
         
         # Set up response with vDC host dSUID
         # Note: Actual field structure depends on your protobuf definition

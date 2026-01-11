@@ -552,8 +552,8 @@ class VdcHost:
         # Notify session of Hello
         await self._session.on_hello_received(message)
         
-        # Create Hello response
-        response = self._session.create_hello_response()
+        # Create Hello response with message_id from request
+        response = self._session.create_hello_response(message)
         
         # Add additional host info to response if available
         # (Depends on your protobuf structure)
@@ -675,6 +675,7 @@ class VdcHost:
         # Build response
         response = Message()
         response.type = Message.VDC_RESPONSE_GET_PROPERTY
+        response.message_id = message.message_id
         
         resp_get_prop = response.vdc_response_get_property
         resp_get_prop.properties.CopyFrom(properties)
@@ -730,6 +731,7 @@ class VdcHost:
             # Build success response
             response = Message()
             response.type = Message.GENERIC_RESPONSE
+            response.message_id = message.message_id
             
             generic_resp = response.generic_response
             generic_resp.code = 0  # Success
@@ -745,6 +747,7 @@ class VdcHost:
             
             response = Message()
             response.type = Message.GENERIC_RESPONSE
+            response.message_id = message.message_id
             
             generic_resp = response.generic_response
             generic_resp.code = 500  # Error
