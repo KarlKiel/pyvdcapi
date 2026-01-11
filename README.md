@@ -83,35 +83,54 @@ asyncio.run(main())
 
 ```
 pyvdcapi/
-├── core/                    # Core domain logic
-│   ├── constants.py         # digitalSTROM constants (scenes, channels, groups)
-│   └── dsuid.py            # dSUID generation
-├── entities/               # Main entities
-│   ├── vdc_host.py        # vDC host (top-level container)
-│   ├── vdc.py             # vDC (device collection)
-│   └── vdsd.py            # vdSD (individual device)
-├── components/            # Device components
-│   ├── actions.py         # ActionManager, StateManager, DevicePropertyManager
-│   ├── output.py          # Output container
-│   ├── output_channel.py  # Individual output channels
-│   ├── button.py          # Button inputs
-│   ├── binary_input.py    # Binary inputs (motion, contact)
-│   └── sensor.py          # Sensor inputs (temperature, etc.)
-├── network/               # Protocol communication
-│   ├── tcp_server.py      # TCP server with 2-byte framing
-│   ├── vdsm_session.py    # vdSM session state machine
-│   ├── message_router.py  # Message routing and handlers
-│   └── service_announcement.py  # mDNS/Avahi service discovery
-├── properties/            # Property system
-│   ├── property_tree.py   # Protobuf ↔ dict conversion
-│   ├── common.py          # Common properties
-│   ├── vdc_props.py       # vDC properties
-│   └── vdsd_props.py      # vdSD properties
-├── persistence/           # Data persistence
-│   └── yaml_store.py      # YAML storage with shadow backup
-└── utils/                 # Utilities
-    ├── callbacks.py       # Observable pattern
-    └── validators.py      # Property validation
+├── proto/                 # Protocol buffer definitions
+│   ├── genericVDC.proto   # vDC API protocol definition
+│   └── genericVDC_pb2.py  # Generated Python protobuf code
+├── pyvdcapi/              # Main package
+│   ├── core/              # Core domain logic
+│   │   ├── constants.py   # digitalSTROM constants (scenes, channels, groups)
+│   │   └── dsuid.py       # dSUID generation
+│   ├── entities/          # Main entities
+│   │   ├── vdc_host.py    # vDC host (top-level container)
+│   │   ├── vdc.py         # vDC (device collection)
+│   │   └── vdsd.py        # vdSD (individual device)
+│   ├── components/        # Device components
+│   │   ├── actions.py     # ActionManager, StateManager, DevicePropertyManager
+│   │   ├── output.py      # Output container
+│   │   ├── output_channel.py  # Individual output channels
+│   │   ├── button.py      # Button inputs
+│   │   ├── binary_input.py    # Binary inputs (motion, contact)
+│   │   └── sensor.py      # Sensor inputs (temperature, etc.)
+│   ├── network/           # Protocol communication
+│   │   ├── tcp_server.py  # TCP server with 2-byte framing
+│   │   ├── vdsm_session.py    # vdSM session state machine
+│   │   ├── message_router.py  # Message routing and handlers
+│   │   └── service_announcement.py  # mDNS/Avahi service discovery
+│   ├── properties/        # Property system
+│   │   ├── property_tree.py   # Protobuf ↔ dict conversion
+│   │   ├── common.py      # Common properties
+│   │   ├── vdc_props.py   # vDC properties
+│   │   └── vdsd_props.py  # vdSD properties
+│   ├── persistence/       # Data persistence
+│   │   └── yaml_store.py  # YAML storage with shadow backup
+│   └── utils/             # Utilities
+│       ├── callbacks.py   # Observable pattern
+│       └── validators.py  # Property validation
+├── examples/              # Example implementations
+│   ├── complete_protocol_demo.py  # Full feature demonstration
+│   ├── motion_light_device.py     # Motion-activated light
+│   ├── device_configuration.py    # Configuration examples
+│   ├── service_announcement_demo.py  # Auto-discovery demo
+│   ├── vdsm_simulator.py         # vdSM protocol simulator
+│   └── demo_with_simulator.py    # Combined demo
+├── tests/                 # Test suite
+│   ├── test_simple.py     # Basic functionality tests
+│   ├── test_service_announcement.py  # Service announcement tests
+│   └── test_vdc_host_announcement.py  # Integration tests
+└── Documentation/         # API specification
+    ├── proto/             # Original proto definition
+    ├── vdc-API/          # API documentation
+    └── vdc-API-properties/  # Property specifications
 ```
 
 ## Message Handlers
@@ -171,10 +190,16 @@ See the `examples/` directory:
 ## Testing
 
 ```bash
+# Run test suite
+python tests/test_simple.py
+python tests/test_service_announcement.py
+python tests/test_vdc_host_announcement.py
+
 # Run examples
 python examples/complete_protocol_demo.py
 python examples/motion_light_device.py
 python examples/device_configuration.py
+python examples/service_announcement_demo.py
 ```
 
 ## Production Ready
