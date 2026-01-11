@@ -221,9 +221,19 @@ class Vdc:
         )
         
         # vDC-specific properties (implementationId, zoneID, capabilities)
-        # Extract only vDC-specific properties
-        vdc_specific_props = {k: v for k, v in vdc_config.items() 
-                              if k in ['implementationId', 'zoneID', 'zone_id', 'capabilities']}
+        # Extract only vDC-specific properties and convert camelCase to snake_case
+        vdc_specific_props = {}
+        if 'implementationId' in vdc_config:
+            vdc_specific_props['implementation_id'] = vdc_config['implementationId']
+        if 'implementation_id' in vdc_config:
+            vdc_specific_props['implementation_id'] = vdc_config['implementation_id']
+        if 'zoneID' in vdc_config:
+            vdc_specific_props['zone_id'] = vdc_config['zoneID']
+        if 'zone_id' in vdc_config:
+            vdc_specific_props['zone_id'] = vdc_config['zone_id']
+        if 'capabilities' in vdc_config:
+            vdc_specific_props['capabilities'] = vdc_config['capabilities']
+        
         self._vdc_props = VdcProperties(**vdc_specific_props)
         
         # Device management
