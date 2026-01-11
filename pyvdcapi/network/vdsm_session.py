@@ -50,7 +50,7 @@ import time
 import logging
 from enum import Enum
 from typing import Optional, Callable, Awaitable
-from genericVDC_pb2 import Message
+from genericVDC_pb2 import Message, VDC_RESPONSE_HELLO
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +225,7 @@ class VdSMSession:
             Message with vdc_ResponseHello containing host dSUID
         """
         message = Message()
-        message.type = Message.VDC_RESPONSE_HELLO
+        message.type = VDC_RESPONSE_HELLO
         
         # Set up response with vDC host dSUID
         # Note: Actual field structure depends on your protobuf definition

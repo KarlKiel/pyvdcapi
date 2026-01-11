@@ -51,7 +51,12 @@ proper response correlation using message IDs.
 import asyncio
 import logging
 from typing import Dict, Callable, Awaitable, Optional, Any
-from genericVDC_pb2 import Message
+from genericVDC_pb2 import (
+    Message,
+    VDSM_REQUEST_HELLO,
+    VDSM_REQUEST_GET_PROPERTY,
+    VDSM_REQUEST_SET_PROPERTY
+)
 
 logger = logging.getLogger(__name__)
 
@@ -260,9 +265,9 @@ class MessageRouter:
         
         # Common request types in vDC API:
         request_types = {
-            Message.VDSM_REQUEST_HELLO,
-            Message.VDSM_REQUEST_GET_PROPERTY,
-            Message.VDSM_REQUEST_SET_PROPERTY,
+            VDSM_REQUEST_HELLO,
+            VDSM_REQUEST_GET_PROPERTY,
+            VDSM_REQUEST_SET_PROPERTY,
             # Add other request types as needed
         }
         
