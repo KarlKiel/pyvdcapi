@@ -135,23 +135,37 @@ class ServiceAnnouncer:
             service_name = f"{self._service_name}.{service_type}"
             
             # Server name must be a valid DNS name ending with .local.
-            # Use simple hostname without special characters that might break Avahi
-            server_name = f"{self.host_name}.local."
+            # CRITICAL: Avahi requires lowercase DNS names for proper resolution
+            # Use lowercase hostname to ensure Avahi compatibility
+            server_name = f"{self.host_name.lower()}.local."
+            
+            print(f"\n{'='*70}")
+            print(f"MDNS SERVICE CONFIGURATION:")
+            print(f"  Type: {service_type}")
+            print(f"  Name: {service_name}")
+            print(f"  Server: {server_name} ← MUST BE LOWERCASE FOR AVAHI!")
+            print(f"  Port: {self.port}")
+            print(f"  Addresses: {['.'.join(str(b) for b in addr) for addr in addresses]}")
+            print(f"{'='*70}\n")
             
             logger.info(f"Creating mDNS service:")
             logger.info(f"  Type: {service_type}")
             logger.info(f"  Name: {service_name}")
-            logger.info(f"  Server: {server_name}")
+            logger.info(f"  Server: {server_name} (lowercase for Avahi)")
             logger.info(f"  Port: {self.port}")
             logger.info(f"  Addresses: {['.'.join(str(b) for b in addr) for addr in addresses]}")
             
+            # AVAHI COMPATIBILITY FIX:
+            # 1. Server name MUST be lowercase for Avahi resolution
+            # 2. Properties can be empty (vDC spec doesn't require TXT records)
+            # 3. Addresses must be list of bytes (already handled)
             self._service_info = ServiceInfo(
                 type_=service_type,
                 name=service_name,
                 port=self.port,
                 addresses=addresses,
                 properties={},  # No TXT records needed for vDC host (per spec)
-                server=server_name
+                server=server_name  # Lowercase for Avahi compatibility
             )
             
             # Start AsyncZeroconf and register service
