@@ -50,9 +50,9 @@ async def create_demo_setup():
     
     # Create a vDC for lights
     lights_vdc = host.create_vdc(
-        vendor="Demo Vendor",
-        model_name="Smart Lights Controller",
-        model_guid="demo-lights-vdc-v1",
+        name="Smart Lights Controller",
+        model="Demo Lights vDC",
+        model_uid="demo-lights-vdc-v1",
         implementationId="x-demo-lights-vdc"
     )
     
@@ -117,9 +117,9 @@ async def create_demo_setup():
     
     # Create a vDC for sensors
     sensors_vdc = host.create_vdc(
-        vendor="Demo Vendor",
-        model_name="Environmental Sensors",
-        model_guid="demo-sensors-vdc-v1",
+        name="Environmental Sensors",
+        model="Demo Sensors vDC",
+        model_uid="demo-sensors-vdc-v1",
         implementationId="x-demo-sensors-vdc"
     )
     
