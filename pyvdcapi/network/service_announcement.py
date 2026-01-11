@@ -171,12 +171,16 @@ class ServiceAnnouncer:
             # Prepare TXT records as bytes for maximum compatibility with
             # zeroconf/Avahi. Some clients display keys only when provided
             # as bytes; ensure both uppercase and lowercase variants are present.
+            # Use string keys/values for broader compatibility with some
+            # zeroconf/avahi consumers; also log at INFO so it's visible in
+            # typical logs. Keep both capitalizations for downstream
+            # consumers that may expect a specific key.
             txt_records = {
-                b'dSUID': self.dsuid.encode('utf-8'),
-                b'dsuid': self.dsuid.encode('utf-8')  # compatibility: some resolvers use lowercase
+                'dSUID': self.dsuid,
+                'dsuid': self.dsuid  # compatibility: some resolvers use lowercase
             }
 
-            logger.debug(f"Prepared TXT records: {txt_records}")
+            logger.info(f"Prepared TXT records: {txt_records}")
             
             self._service_info = ServiceInfo(
                 type_=service_type,
