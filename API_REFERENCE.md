@@ -154,6 +154,8 @@ VdcHost(
     persistence_file: str = "vdc_config.yaml",
     auto_save: bool = True,
     enable_backup: bool = True,
+    announce_service: bool = False,
+    use_avahi: bool = False,
     **properties
 )
 ```
@@ -170,6 +172,8 @@ VdcHost(
 - `persistence_file`: Path to YAML configuration file
 - `auto_save`: Automatically save configuration on changes
 - `enable_backup`: Create shadow .bak file during saves
+- `announce_service`: Enable mDNS/DNS-SD service announcement for auto-discovery (default: False)
+- `use_avahi`: Use Avahi daemon instead of zeroconf library (Linux only, default: False)
 - `**properties`: Additional properties (see optional properties below)
 
 **Returns:** VdcHost instance
@@ -213,6 +217,35 @@ host = VdcHost(
 )
 ```
 
+**Service Announcement (Optional):**
+
+The vDC host can optionally announce itself on the local network using mDNS/DNS-SD according to the vDC API specification (Section 3: Discovery). This allows vdSMs to automatically discover available vDC hosts without manual configuration.
+
+```python
+# Enable service announcement with zeroconf (cross-platform)
+host = VdcHost(
+    name="My vDC Host",
+    port=8444,
+    announce_service=True  # Requires: pip install zeroconf
+)
+
+# Use Avahi daemon on Linux (requires Avahi running, needs root privileges)
+host = VdcHost(
+    name="My vDC Host",
+    port=8444,
+    announce_service=True,
+    use_avahi=True  # Linux only, no additional dependencies
+)
+```
+
+**Service Details:**
+- Service type: `_ds-vdc._tcp.local.`
+- Service name: `{name}._ds-vdc._tcp.local.`
+- TXT records: Contains host model and version information
+- Port: Configured TCP port (default: 8444)
+
+For complete documentation on service announcement, see [SERVICE_ANNOUNCEMENT.md](SERVICE_ANNOUNCEMENT.md).
+
 #### Methods
 
 ##### `async start() -> None`
@@ -223,7 +256,8 @@ Start the vDC host and begin accepting vdSM connections.
 1. Creates TCP server on configured port
 2. Begins listening for vdSM connections
 3. Loads persisted vDCs from configuration
-4. Transitions to running state
+4. Starts service announcement if enabled
+5. Transitions to running state
 
 **Raises:**
 - `OSError`: If port is already in use
@@ -242,8 +276,9 @@ Stop the vDC host and close all connections.
 **Behavior:**
 1. Closes vdSM session if connected
 2. Stops TCP server
-3. Saves final configuration state
-4. Transitions to stopped state
+3. Stops service announcement if running
+4. Saves final configuration state
+5. Transitions to stopped state
 
 **Example:**
 ```python
