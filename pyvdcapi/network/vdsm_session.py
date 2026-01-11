@@ -50,7 +50,7 @@ import time
 import logging
 from enum import Enum
 from typing import Optional, Callable, Awaitable
-from genericVDC_pb2 import Message, VDC_RESPONSE_HELLO
+from proto.genericVDC_pb2 import Message, VDC_RESPONSE_HELLO
 
 logger = logging.getLogger(__name__)
 

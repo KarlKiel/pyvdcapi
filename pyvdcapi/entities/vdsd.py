@@ -120,7 +120,7 @@ dimmer.on_output_change(apply_to_hardware)
 import logging
 import asyncio
 from typing import Dict, List, Optional, Any, Callable
-from genericVDC_pb2 import Message
+from proto.genericVDC_pb2 import Message
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..core.constants import DSScene, DSChannelType, DSSceneEffect

@@ -30,8 +30,8 @@ from dataclasses import dataclass, field
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-import genericVDC_pb2 as pb
-from genericVDC_pb2 import (
+import proto.genericVDC_pb2 as pb
+from proto.genericVDC_pb2 import (
     Message,
     VDSM_REQUEST_HELLO,
     VDC_RESPONSE_HELLO,

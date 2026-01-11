@@ -4,21 +4,21 @@ This directory contains the Python representation of the vDC API protocol buffer
 
 ## Generated Files
 
-- `genericVDC_pb2.py` - Generated Python code from `Documentation/proto/genericVDC.proto`
+- `proto/genericVDC_pb2.py` - Generated Python code from `proto/genericVDC.proto`
 
 ## How to Use
 
 The generated Python file contains classes for all message types defined in the proto file. You can import and use them as follows:
 
 ```python
-import genericVDC_pb2
+from proto import genericVDC_pb2
 
 # Create a message
 hello_request = genericVDC_pb2.vdsm_RequestHello()
 hello_request.dSUID = "device-id-123"
 hello_request.api_version = 2
 
-# Serialize to bytes
+# Serialialize to bytes
 serialized_data = hello_request.SerializeToString()
 
 # Deserialize from bytes

@@ -88,7 +88,7 @@ Threading Model:
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any, Callable, Awaitable
-from genericVDC_pb2 import (
+from proto.genericVDC_pb2 import (
     Message,
     VDSM_REQUEST_HELLO,
     VDSM_SEND_BYE,

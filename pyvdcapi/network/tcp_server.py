@@ -31,7 +31,7 @@ import asyncio
 import struct
 import logging
 from typing import Optional, Callable, Awaitable
-from genericVDC_pb2 import Message
+from proto.genericVDC_pb2 import Message
 
 logger = logging.getLogger(__name__)
 

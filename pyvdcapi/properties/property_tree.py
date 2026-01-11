@@ -5,13 +5,7 @@ Provides bidirectional conversion for property trees matching the vDC API struct
 """
 
 from typing import Any, Dict, List, Optional, Union
-import sys
-import os
-
-# Add parent directory to path to import genericVDC_pb2
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-import genericVDC_pb2 as pb
-
+import proto.genericVDC_pb2 as pb
 import logging
 
 logger = logging.getLogger(__name__)

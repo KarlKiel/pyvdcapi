@@ -51,7 +51,7 @@ proper response correlation using message IDs.
 import asyncio
 import logging
 from typing import Dict, Callable, Awaitable, Optional, Any
-from genericVDC_pb2 import (
+from proto.genericVDC_pb2 import (
     Message,
     VDSM_REQUEST_HELLO,
     VDSM_REQUEST_GET_PROPERTY,
