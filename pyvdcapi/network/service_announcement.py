@@ -126,7 +126,11 @@ class ServiceAnnouncer:
             )
             
             # Start AsyncZeroconf and register service
+            logger.debug("Creating AsyncZeroconf instance...")
             self._zeroconf = AsyncZeroconf()
+            logger.debug(f"AsyncZeroconf created: {self._zeroconf}")
+            
+            logger.debug(f"Registering service: {self._service_info}")
             await self._zeroconf.async_register_service(self._service_info)
             logger.debug("Registered service with AsyncZeroconf")
             
