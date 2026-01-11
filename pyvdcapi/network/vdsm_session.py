@@ -51,7 +51,12 @@ import logging
 import random
 from enum import Enum
 from typing import Optional, Callable, Awaitable
-from proto.genericVDC_pb2 import Message, VDC_RESPONSE_HELLO
+from proto.genericVDC_pb2 import (
+    Message,
+    VDC_RESPONSE_HELLO,
+    VDSM_SEND_PING,
+    VDC_SEND_PONG,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -444,7 +449,7 @@ class VdSMSession:
                 # Send Ping
                 logger.debug("Sending Ping to vdSM")
                 ping_message = Message()
-                ping_message.type = Message.VDC_SEND_PING
+                ping_message.type = VDSM_SEND_PING
 
                 # Assign a non-zero random message id for correlation
                 ping_message.message_id = random.getrandbits(31)
