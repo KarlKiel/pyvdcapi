@@ -165,9 +165,10 @@ class ServiceAnnouncer:
             # Advertise both uppercase and lowercase keys for compatibility.
             # Some resolvers (and the original Avahi-based DSS) expect 'dSUID'
             # using that exact capitalization. Provide both to be safe.
+            # Use bytes for keys/values to ensure zeroconf advertises them correctly
             txt_records = {
-                'dSUID': self.dsuid,
-                'dsuid': self.dsuid  # compatibility: some resolvers use lowercase
+                b'dSUID': self.dsuid.encode('utf-8'),
+                b'dsuid': self.dsuid.encode('utf-8')  # compatibility: some resolvers use lowercase
             }
             
             self._service_info = ServiceInfo(
