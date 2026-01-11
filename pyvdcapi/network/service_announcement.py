@@ -49,7 +49,7 @@ class ServiceAnnouncer:
         self.host_name = host_name or socket.gethostname()
         self.use_avahi = use_avahi
         
-        self._service_type = "_ds-vdc._tcp.local."
+        self._service_type = "_ds-vdc._tcp"
         self._service_name = f"digitalSTROM vDC host on {self.host_name}"
         
         # For zeroconf implementation
@@ -125,14 +125,33 @@ class ServiceAnnouncer:
                 logger.error("No network addresses found for service announcement")
                 return False
             
-            # Create service info
+            # Create service info - must match Avahi format exactly
+            # Type must include .local. suffix for mDNS
+            service_type = f"{self._service_type}.local."
+            
+            # Create fully-qualified service name
+            # Format: <instance_name>.<service_type>
+            # Example: "digitalSTROM vDC host on W-5CG53327JF._ds-vdc._tcp.local."
+            service_name = f"{self._service_name}.{service_type}"
+            
+            # Server name must be a valid DNS name ending with .local.
+            # Use simple hostname without special characters that might break Avahi
+            server_name = f"{self.host_name}.local."
+            
+            logger.info(f"Creating mDNS service:")
+            logger.info(f"  Type: {service_type}")
+            logger.info(f"  Name: {service_name}")
+            logger.info(f"  Server: {server_name}")
+            logger.info(f"  Port: {self.port}")
+            logger.info(f"  Addresses: {['.'.join(str(b) for b in addr) for addr in addresses]}")
+            
             self._service_info = ServiceInfo(
-                type_=self._service_type,
-                name=f"{self._service_name}.{self._service_type}",
+                type_=service_type,
+                name=service_name,
                 port=self.port,
                 addresses=addresses,
-                properties={},  # No TXT records needed for vDC host
-                server=f"{self.host_name}.local."
+                properties={},  # No TXT records needed for vDC host (per spec)
+                server=server_name
             )
             
             # Start AsyncZeroconf and register service
