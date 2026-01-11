@@ -19,7 +19,7 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from pyvdcapi import VdcHost
-from pyvdcapi.core.constants import DSGroup, OutputChannelType
+from pyvdcapi.core.constants import DSGroup, DSChannelType
 from examples.vdsm_simulator import VdsmSimulator
 
 # Set up logging
@@ -73,7 +73,7 @@ async def create_demo_setup():
     
     # Add brightness channel
     living_room_light.add_output_channel(
-        channel_type=OutputChannelType.BRIGHTNESS,
+        channel_type=DSChannelType.BRIGHTNESS,
         name="brightness",
         min_value=0.0,
         max_value=100.0,
@@ -101,15 +101,15 @@ async def create_demo_setup():
     
     # Add brightness, hue, saturation channels
     bedroom_light.add_output_channel(
-        channel_type=OutputChannelType.BRIGHTNESS,
+        channel_type=DSChannelType.BRIGHTNESS,
         name="brightness"
     )
     bedroom_light.add_output_channel(
-        channel_type=OutputChannelType.HUE,
+        channel_type=DSChannelType.HUE,
         name="hue"
     )
     bedroom_light.add_output_channel(
-        channel_type=OutputChannelType.SATURATION,
+        channel_type=DSChannelType.SATURATION,
         name="saturation"
     )
     
@@ -225,7 +225,7 @@ async def run_demo():
                 logger.info("\n1. Setting brightness to 50%...")
                 await simulator.set_output_value(
                     light_device.dsuid, 
-                    OutputChannelType.BRIGHTNESS, 
+                    DSChannelType.BRIGHTNESS, 
                     50.0, 
                     transition_time=1.0
                 )
@@ -235,7 +235,7 @@ async def run_demo():
                 logger.info("\n2. Setting brightness to 100%...")
                 await simulator.set_output_value(
                     light_device.dsuid, 
-                    OutputChannelType.BRIGHTNESS, 
+                    DSChannelType.BRIGHTNESS, 
                     100.0, 
                     transition_time=2.0
                 )
