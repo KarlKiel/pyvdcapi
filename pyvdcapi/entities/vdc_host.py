@@ -113,6 +113,7 @@ from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..network.tcp_server import TCPServer
 from ..network.vdsm_session import VdSMSession
 from ..network.message_router import MessageRouter
+from ..network.service_announcement import ServiceAnnouncer
 from ..persistence.yaml_store import YAMLPersistence
 from ..properties.common import CommonProperties
 from ..properties.property_tree import PropertyTree
@@ -171,6 +172,8 @@ class VdcHost:
         persistence_file: str = "vdc_config.yaml",
         auto_save: bool = True,
         enable_backup: bool = True,
+        announce_service: bool = False,
+        use_avahi: bool = False,
         **properties
     ):
         """
@@ -188,6 +191,8 @@ class VdcHost:
             persistence_file: Path to YAML configuration file
             auto_save: Automatically save on property changes
             enable_backup: Enable shadow backup (.bak) file
+            announce_service: Enable mDNS/DNS-SD service announcement for auto-discovery (default: False)
+            use_avahi: Use Avahi daemon instead of zeroconf library (requires Linux + root, default: False)
             **properties: Additional host properties
         
         Example:
@@ -266,6 +271,19 @@ class VdcHost:
         # Key: vDC dSUID, Value: Vdc instance
         self._vdcs: Dict[str, 'Vdc'] = {}
         
+        # Service announcement (optional)
+        self._announce_service = announce_service
+        self._service_announcer: Optional[ServiceAnnouncer] = None
+        if announce_service:
+            self._service_announcer = ServiceAnnouncer(
+                port=self.port,
+                host_name=self._common_props.get_name(),
+                use_avahi=use_avahi
+            )
+            logger.info(
+                f"Service announcement enabled using {'Avahi' if use_avahi else 'zeroconf'}"
+            )
+        
         # State tracking
         self._running = False
         
@@ -307,6 +325,18 @@ class VdcHost:
         
         # Start listening
         await self._tcp_server.start()
+        
+        # Start service announcement if enabled
+        if self._service_announcer:
+            success = self._service_announcer.start()
+            if success:
+                logger.info(f"Service announcement started: _ds-vdc._tcp on port {self.port}")
+            else:
+                logger.warning(
+                    "Failed to start service announcement. "
+                    "vDC host will still work but won't be auto-discoverable. "
+                    "Install 'zeroconf' package: pip install zeroconf"
+                )
         
         # Load persisted vDCs (implementation depends on Vdc class)
         # await self._load_vdcs()
@@ -350,6 +380,11 @@ class VdcHost:
                     logger.error(f"Error sending Bye: {e}")
             
             await self._session.on_disconnected()
+        
+        # Stop service announcement
+        if self._service_announcer:
+            self._service_announcer.stop()
+            logger.info("Service announcement stopped")
         
         # Stop TCP server
         if self._tcp_server:

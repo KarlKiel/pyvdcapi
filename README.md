@@ -6,6 +6,7 @@ Python implementation of the digitalSTROM vDC API - A comprehensive library for 
 
 ✅ **Complete Protocol Implementation** - All 19 message handlers from genericVDC.proto  
 ✅ **Bidirectional Sync** - Automatic push notifications to vdSM on value changes  
+✅ **Auto-Discovery** - mDNS/DNS-SD service announcement (Avahi/Bonjour)  
 ✅ **Scene Management** - Save, recall, undo, and min-scene operations  
 ✅ **Output Control** - Channel values, dimming, and control values  
 ✅ **Device Components** - Buttons, sensors, binary inputs, outputs  
@@ -22,6 +23,9 @@ cd pyvdcapi
 
 # Install dependencies
 pip install protobuf pyyaml
+
+# Optional: For service announcement (auto-discovery)
+pip install zeroconf
 ```
 
 ## Quick Start
@@ -32,12 +36,13 @@ from pyvdcapi.entities.vdc_host import VdcHost
 from pyvdcapi.core.constants import DSGroup, DSChannelType
 
 async def main():
-    # Create vDC host
+    # Create vDC host with service announcement
     host = VdcHost(
         persistence_path="config.yaml",
         mac_address="00:11:22:33:44:55",
         vendor_id="example.com",
-        name="My vDC Host"
+        name="My vDC Host",
+        announce_service=True  # Enable auto-discovery via mDNS
     )
     
     # Create vDC (device container)
@@ -95,7 +100,8 @@ pyvdcapi/
 ├── network/               # Protocol communication
 │   ├── tcp_server.py      # TCP server with 2-byte framing
 │   ├── vdsm_session.py    # vdSM session state machine
-│   └── message_router.py  # Message routing and handlers
+│   ├── message_router.py  # Message routing and handlers
+│   └── service_announcement.py  # mDNS/Avahi service discovery
 ├── properties/            # Property system
 │   ├── property_tree.py   # Protobuf ↔ dict conversion
 │   ├── common.py          # Common properties
@@ -151,9 +157,12 @@ See the `examples/` directory:
 - **`complete_protocol_demo.py`** - Demonstrates all features
 - **`motion_light_device.py`** - Motion-activated light
 - **`device_configuration.py`** - Configuration and cloning
+- **`service_announcement_demo.py`** - Auto-discovery with mDNS
+- **`vdsm_simulator.py`** - vdSM protocol simulator for testing
 
 ## Documentation
 
+- **[SERVICE_ANNOUNCEMENT.md](SERVICE_ANNOUNCEMENT.md)** - Auto-discovery setup and usage
 - **[VALIDATION_COMPLETE.md](VALIDATION_COMPLETE.md)** - Complete protocol validation report
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture
 - **[CONSTANTS_README.md](CONSTANTS_README.md)** - digitalSTROM constants guide
