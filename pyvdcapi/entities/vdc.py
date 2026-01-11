@@ -221,7 +221,10 @@ class Vdc:
         )
         
         # vDC-specific properties (implementationId, zoneID, capabilities)
-        self._vdc_props = VdcProperties(**vdc_config)
+        # Extract only vDC-specific properties
+        vdc_specific_props = {k: v for k, v in vdc_config.items() 
+                              if k in ['implementationId', 'zoneID', 'zone_id', 'capabilities']}
+        self._vdc_props = VdcProperties(**vdc_specific_props)
         
         # Device management
         # Key: vdSD dSUID, Value: VdSD instance
