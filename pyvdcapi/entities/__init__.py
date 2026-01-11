@@ -27,3 +27,8 @@ Entity Hierarchy:
   │ VdSD 2 │    │ VdSD 4 │    │ VdSD 6 │
   └────────┘    └────────┘    └────────┘
 """
+from .vdc_host import VdcHost
+from .vdc import Vdc
+from .vdsd import VdSD
+
+__all__ = ['VdcHost', 'Vdc', 'VdSD']
