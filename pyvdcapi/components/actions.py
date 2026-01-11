@@ -117,7 +117,7 @@ current = states.get_state("operational")  # Returns "running"
 
 import logging
 from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
-from ..utils.callbacks import Observable
+from ..utils.callbacks import Observable, ObservableDict
 
 if TYPE_CHECKING:
     from ..entities.vdsd import VdSD
@@ -428,8 +428,8 @@ class StateManager:
         # Current state values: state_name -> option_value
         self._values: Dict[str, Any] = {}
         
-        # Observable for state changes
-        self._change_observable = Observable()
+        # Observable for state changes - use ObservableDict for multiple states
+        self._change_observable = ObservableDict()
         
         logger.debug(f"Created StateManager for vdSD {vdsd.dsuid}")
     
@@ -500,8 +500,8 @@ class StateManager:
         
         logger.info(f"State {name}: {old_value} → {value}")
         
-        # Trigger callbacks
-        self._change_observable.notify(name, value)
+        # Trigger callbacks using ObservableDict
+        self._change_observable.set(name, value)
         
         # TODO: Send push notification to vdSM
     
@@ -517,20 +517,21 @@ class StateManager:
         """
         return self._values.get(name)
     
-    def on_change(self, callback: Callable[[str, Any], None]) -> None:
+    def on_change(self, state_name: str, callback: Callable[[Any], None]) -> None:
         """
-        Register callback for state changes.
+        Register callback for specific state changes.
         
         Args:
-            callback: Function(state_name, new_value)
+            state_name: Name of the state to monitor
+            callback: Function(new_value) called when state changes
         
         Example:
-            def on_state_change(name, value):
-                print(f"State {name} changed to {value}")
+            def on_operational_change(value):
+                print(f"Operational state changed to {value}")
             
-            states.on_change(on_state_change)
+            states.on_change("operational", on_operational_change)
         """
-        self._change_observable.subscribe(callback)
+        self._change_observable.subscribe(state_name, callback)
     
     def get_descriptions(self) -> Dict[str, Any]:
         """Get all state descriptions."""
