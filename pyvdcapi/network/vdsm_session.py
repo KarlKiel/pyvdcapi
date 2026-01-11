@@ -50,7 +50,7 @@ import time
 import logging
 from enum import Enum
 from typing import Optional, Callable, Awaitable
-from proto.genericVDC_pb2 import Message, VDC_RESPONSE_HELLO
+from proto.genericVDC_pb2 import Message, VDC_RESPONSE_HELLO, VDC_SEND_PONG
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +274,7 @@ class VdSMSession:
         
         # Create Pong response
         message = Message()
-        message.type = Message.VDC_SEND_PONG
+        message.type = VDC_SEND_PONG
         
         return message
     

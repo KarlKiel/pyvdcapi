@@ -34,6 +34,7 @@ class ServiceAnnouncer:
     def __init__(
         self,
         port: int,
+        dsuid: str,
         host_name: Optional[str] = None,
         use_avahi: bool = False
     ):
@@ -42,10 +43,12 @@ class ServiceAnnouncer:
         
         Args:
             port: TCP port the vDC host is listening on
+            dsuid: The dSUID of the vDC host (required for TXT records)
             host_name: Optional custom host name (defaults to system hostname)
             use_avahi: If True, use Avahi daemon (Linux). If False, use zeroconf library
         """
         self.port = port
+        self.dsuid = dsuid
         self.host_name = host_name or socket.gethostname()
         self.use_avahi = use_avahi
         
@@ -157,14 +160,18 @@ class ServiceAnnouncer:
             
             # AVAHI COMPATIBILITY FIX:
             # 1. Server name MUST be lowercase for Avahi resolution
-            # 2. Properties can be empty (vDC spec doesn't require TXT records)
+            # 2. Include dSUID in TXT records for DSS identification
             # 3. Addresses must be list of bytes (already handled)
+            txt_records = {
+                'dsuid': self.dsuid  # DSS expects this to identify the vDC host
+            }
+            
             self._service_info = ServiceInfo(
                 type_=service_type,
                 name=service_name,
                 port=self.port,
                 addresses=addresses,
-                properties={},  # No TXT records needed for vDC host (per spec)
+                properties=txt_records,
                 server=server_name  # Lowercase for Avahi compatibility
             )
             

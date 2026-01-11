@@ -277,7 +277,7 @@ class VdcHost:
         if announce_service:
             self._service_announcer = ServiceAnnouncer(
                 port=self.port,
-                host_name=self._common_props.get_name(),
+                dsuid=self.dsuid,
                 use_avahi=use_avahi
             )
             logger.info(
