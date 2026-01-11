@@ -165,7 +165,7 @@ class VdsmSimulator:
         self.writer.write(header + data)
         await self.writer.drain()
         
-        logger.debug(f"→ Sent message type {message.Type.Name(message.type)}")
+        logger.debug(f"→ Sent message type {message.type}")
     
     async def _receive_message(self) -> Optional[Message]:
         """
@@ -186,7 +186,7 @@ class VdsmSimulator:
             message = Message()
             message.ParseFromString(data)
             
-            logger.debug(f"← Received message type {message.Type.Name(message.type)}")
+            logger.debug(f"← Received message type {message.type}")
             return message
             
         except asyncio.IncompleteReadError:
