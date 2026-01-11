@@ -270,8 +270,8 @@ class VdcHost:
         self._running = False
         
         logger.info(
-            f"vDC host initialized: name='{self._common_props.get('name')}', "
-            f"model='{self._common_props.get('model')}'"
+            f"vDC host initialized: name='{self._common_props.get_name()}', "
+            f"model='{self._common_props.get_property('model')}'"
         )
     
     async def start(self) -> None:
