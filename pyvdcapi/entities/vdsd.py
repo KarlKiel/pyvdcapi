@@ -268,7 +268,7 @@ class VdSD:
         
         self._common_props = CommonProperties(
             dsuid=self.dsuid,
-            entity_type='vDSD',
+            entity_type='vdSD',
             name=name,
             model=model,
             model_uid=model_uid,
