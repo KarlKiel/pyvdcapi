@@ -88,7 +88,26 @@ Threading Model:
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any, Callable, Awaitable
-from genericVDC_pb2 import Message
+from genericVDC_pb2 import (
+    Message,
+    VDSM_REQUEST_HELLO,
+    VDSM_SEND_BYE,
+    VDSM_SEND_PING,
+    VDC_SEND_PONG,
+    VDSM_REQUEST_GET_PROPERTY,
+    VDSM_REQUEST_SET_PROPERTY,
+    VDSM_REQUEST_GENERIC_REQUEST,
+    VDSM_SEND_REMOVE,
+    VDSM_NOTIFICATION_CALL_SCENE,
+    VDSM_NOTIFICATION_SAVE_SCENE,
+    VDSM_NOTIFICATION_UNDO_SCENE,
+    VDSM_NOTIFICATION_SET_LOCAL_PRIO,
+    VDSM_NOTIFICATION_CALL_MIN_SCENE,
+    VDSM_NOTIFICATION_IDENTIFY,
+    VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE,
+    VDSM_NOTIFICATION_DIM_CHANNEL,
+    VDSM_NOTIFICATION_SET_CONTROL_VALUE,
+)
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..network.tcp_server import TCPServer
@@ -365,35 +384,35 @@ class VdcHost:
         # Note: Using lambda to bind self to handler methods
         handlers = {
             # Session management
-            Message.VDSM_REQUEST_HELLO: self._handle_hello,
-            Message.VDSM_SEND_BYE: self._handle_bye,
-            Message.VDSM_SEND_PING: self._handle_ping,
-            Message.VDC_SEND_PONG: self._handle_pong,
+            VDSM_REQUEST_HELLO: self._handle_hello,
+            VDSM_SEND_BYE: self._handle_bye,
+            VDSM_SEND_PING: self._handle_ping,
+            VDC_SEND_PONG: self._handle_pong,
             
             # Property access
-            Message.VDSM_REQUEST_GET_PROPERTY: self._handle_get_property,
-            Message.VDSM_REQUEST_SET_PROPERTY: self._handle_set_property,
+            VDSM_REQUEST_GET_PROPERTY: self._handle_get_property,
+            VDSM_REQUEST_SET_PROPERTY: self._handle_set_property,
             
             # Generic requests
-            Message.VDSM_REQUEST_GENERIC_REQUEST: self._handle_generic_request,
+            VDSM_REQUEST_GENERIC_REQUEST: self._handle_generic_request,
             
             # Device management
-            Message.VDSM_SEND_REMOVE: self._handle_remove,
+            VDSM_SEND_REMOVE: self._handle_remove,
             
             # Scene operations (notifications - no response expected)
-            Message.VDSM_NOTIFICATION_CALL_SCENE: self._handle_call_scene,
-            Message.VDSM_NOTIFICATION_SAVE_SCENE: self._handle_save_scene,
-            Message.VDSM_NOTIFICATION_UNDO_SCENE: self._handle_undo_scene,
-            Message.VDSM_NOTIFICATION_SET_LOCAL_PRIO: self._handle_set_local_prio,
-            Message.VDSM_NOTIFICATION_CALL_MIN_SCENE: self._handle_call_min_scene,
+            VDSM_NOTIFICATION_CALL_SCENE: self._handle_call_scene,
+            VDSM_NOTIFICATION_SAVE_SCENE: self._handle_save_scene,
+            VDSM_NOTIFICATION_UNDO_SCENE: self._handle_undo_scene,
+            VDSM_NOTIFICATION_SET_LOCAL_PRIO: self._handle_set_local_prio,
+            VDSM_NOTIFICATION_CALL_MIN_SCENE: self._handle_call_min_scene,
             
             # Device identification
-            Message.VDSM_NOTIFICATION_IDENTIFY: self._handle_identify,
+            VDSM_NOTIFICATION_IDENTIFY: self._handle_identify,
             
             # Output control
-            Message.VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE: self._handle_set_output_channel_value,
-            Message.VDSM_NOTIFICATION_DIM_CHANNEL: self._handle_dim_channel,
-            Message.VDSM_NOTIFICATION_SET_CONTROL_VALUE: self._handle_set_control_value,
+            VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE: self._handle_set_output_channel_value,
+            VDSM_NOTIFICATION_DIM_CHANNEL: self._handle_dim_channel,
+            VDSM_NOTIFICATION_SET_CONTROL_VALUE: self._handle_set_control_value,
         }
         
         self._message_router.register_handlers(handlers)
