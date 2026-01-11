@@ -162,8 +162,12 @@ class ServiceAnnouncer:
             # 1. Server name MUST be lowercase for Avahi resolution
             # 2. Include dSUID in TXT records for DSS identification
             # 3. Addresses must be list of bytes (already handled)
+            # Advertise both uppercase and lowercase keys for compatibility.
+            # Some resolvers (and the original Avahi-based DSS) expect 'dSUID'
+            # using that exact capitalization. Provide both to be safe.
             txt_records = {
-                'dsuid': self.dsuid  # DSS expects this to identify the vDC host
+                'dSUID': self.dsuid,
+                'dsuid': self.dsuid  # compatibility: some resolvers use lowercase
             }
             
             self._service_info = ServiceInfo(
