@@ -31,7 +31,21 @@ from dataclasses import dataclass, field
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import genericVDC_pb2 as pb
-from genericVDC_pb2 import Message
+from genericVDC_pb2 import (
+    Message,
+    VDSM_REQUEST_HELLO,
+    VDC_RESPONSE_HELLO,
+    VDSM_REQUEST_GET_PROPERTY,
+    VDC_RESPONSE_GET_PROPERTY,
+    VDSM_REQUEST_GENERIC_REQUEST,
+    VDC_RESPONSE_GENERIC_REQUEST,
+    VDC_SEND_ANNOUNCE_VDC,
+    VDC_SEND_ANNOUNCE_DEVICE,
+    VDSM_NOTIFICATION_CALL_SCENE,
+    VDSM_NOTIFICATION_SAVE_SCENE,
+    VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE,
+    VDC_SEND_BYE
+)
 
 # Set up logging
 logging.basicConfig(
@@ -117,7 +131,7 @@ class VdsmSimulator:
             try:
                 # Send Bye message
                 bye_msg = Message()
-                bye_msg.type = Message.VDC_SEND_BYE
+                bye_msg.type = VDC_SEND_BYE
                 await self._send_message(bye_msg)
                 
                 self.writer.close()
@@ -195,7 +209,7 @@ class VdsmSimulator:
         
         # Create Hello request
         msg = Message()
-        msg.type = Message.VDSM_REQUEST_HELLO
+        msg.type = VDSM_REQUEST_HELLO
         msg.message_id = self._get_next_message_id()
         
         msg.vdsm_request_hello.dSUID = "vdsm-simulator-001"
@@ -205,7 +219,7 @@ class VdsmSimulator:
         
         # Wait for response
         response = await self._receive_message()
-        if not response or response.type != Message.VDC_RESPONSE_HELLO:
+        if not response or response.type != VDC_RESPONSE_HELLO:
             logger.error("✗ Did not receive Hello response")
             return False
         
@@ -230,7 +244,7 @@ class VdsmSimulator:
         from pyvdcapi.properties.property_tree import PropertyTree
         
         msg = Message()
-        msg.type = Message.VDSM_REQUEST_GET_PROPERTY
+        msg.type = VDSM_REQUEST_GET_PROPERTY
         msg.message_id = self._get_next_message_id()
         
         msg.vdsm_request_get_property.dSUID = dsuid
@@ -241,7 +255,7 @@ class VdsmSimulator:
         
         # Wait for response
         response = await self._receive_message()
-        if not response or response.type != Message.VDC_RESPONSE_GET_PROPERTY:
+        if not response or response.type != VDC_RESPONSE_GET_PROPERTY:
             logger.error("✗ Did not receive GetProperty response")
             return None
         
@@ -270,7 +284,7 @@ class VdsmSimulator:
         
         # Generic request to announce vDCs
         msg = Message()
-        msg.type = Message.VDSM_REQUEST_GENERIC_REQUEST
+        msg.type = VDSM_REQUEST_GENERIC_REQUEST
         msg.message_id = self._get_next_message_id()
         
         msg.vdsm_request_generic_request.dSUID = ""
@@ -293,12 +307,12 @@ class VdsmSimulator:
             if not response:
                 break
             
-            if response.type == Message.VDC_SEND_ANNOUNCE_VDC:
+            if response.type == VDC_SEND_ANNOUNCE_VDC:
                 dsuid = response.vdc_send_announce_vdc.dSUID
                 vdc_dsuids.append(dsuid)
                 logger.info(f"  ← Announced vDC: {dsuid}")
                 
-            elif response.type == Message.VDC_RESPONSE_GENERIC_REQUEST:
+            elif response.type == VDC_RESPONSE_GENERIC_REQUEST:
                 # End of announcements
                 logger.info(f"✓ Discovery complete: {len(vdc_dsuids)} vDC(s) found")
                 break
@@ -352,7 +366,7 @@ class VdsmSimulator:
         
         # Generic request to announce devices
         msg = Message()
-        msg.type = Message.VDSM_REQUEST_GENERIC_REQUEST
+        msg.type = VDSM_REQUEST_GENERIC_REQUEST
         msg.message_id = self._get_next_message_id()
         
         msg.vdsm_request_generic_request.dSUID = vdc_dsuid
@@ -376,12 +390,12 @@ class VdsmSimulator:
                 if not response:
                     break
                 
-                if response.type == Message.VDC_SEND_ANNOUNCE_DEVICE:
+                if response.type == VDC_SEND_ANNOUNCE_DEVICE:
                     dsuid = response.vdc_send_announce_device.dSUID
                     device_dsuids.append(dsuid)
                     logger.info(f"  ← Announced device: {dsuid}")
                     
-                elif response.type == Message.VDC_RESPONSE_GENERIC_REQUEST:
+                elif response.type == VDC_RESPONSE_GENERIC_REQUEST:
                     # End of announcements
                     logger.info(f"✓ Discovery complete: {len(device_dsuids)} device(s) found")
                     break
@@ -452,7 +466,7 @@ class VdsmSimulator:
         logger.info(f"\n→ Calling scene {scene} on device {dsuid}")
         
         msg = Message()
-        msg.type = Message.VDSM_NOTIFICATION_CALL_SCENE
+        msg.type = VDSM_NOTIFICATION_CALL_SCENE
         
         msg.vdsm_notification_call_scene.dSUID = dsuid
         msg.vdsm_notification_call_scene.scene = scene
@@ -475,7 +489,7 @@ class VdsmSimulator:
         logger.info(f"\n→ Setting output channel {channel_type} to {value}% on {dsuid}")
         
         msg = Message()
-        msg.type = Message.VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE
+        msg.type = VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE
         
         msg.vdsm_notification_set_output_channel_value.dSUID = dsuid
         msg.vdsm_notification_set_output_channel_value.channel_type = channel_type
@@ -497,7 +511,7 @@ class VdsmSimulator:
         logger.info(f"\n→ Saving current state to scene {scene} on {dsuid}")
         
         msg = Message()
-        msg.type = Message.VDSM_NOTIFICATION_SAVE_SCENE
+        msg.type = VDSM_NOTIFICATION_SAVE_SCENE
         
         msg.vdsm_notification_save_scene.dSUID = dsuid
         msg.vdsm_notification_save_scene.scene = scene
