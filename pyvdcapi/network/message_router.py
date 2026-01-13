@@ -216,14 +216,15 @@ class MessageRouter:
             
             # If handler returned a response, ensure message_id is set
             if response:
-                # Copy message_id from request to response for correlation
-                # Note: Only set if request had a message_id
-                if message.HasField('message_id'):
-                    response.message_id = message.message_id
-                
+                # Ensure response echoes the incoming message_id so that
+                # notification-style requests (e.g. vdsm_SendPing) get
+                # a Pong with the same id. Copy unconditionally — the
+                # value will be 0 if the request did not include an id.
+                response.message_id = message.message_id
+
                 logger.debug(
                     f"Handler returned response: type={response.type}, "
-                    f"message_id={response.message_id if response.HasField('message_id') else 'none'}"
+                    f"message_id={response.message_id}"
                 )
             else:
                 logger.debug("Handler returned no response (notification)")
