@@ -287,11 +287,18 @@ class VdSMSession:
         self.last_activity = time.time()
         logger.debug("Received Ping, sending Pong")
         
-        # Create Pong response with same message ID
+        # Create Pong response with same message ID and payload
         message = Message()
         message.type = VDC_SEND_PONG
         message.message_id = ping_message.message_id
-        
+
+        # Populate the vdc_SendPong submessage (include host dSUID)
+        try:
+            message.vdc_send_pong.dSUID = self.vdc_host_dsuid
+        except Exception:
+            # If submessage is unavailable for any reason, continue
+            logger.debug("Unable to set vdc_send_pong.dSUID on Pong message")
+
         return message
     
     def on_pong_received(self, pong_message: Message) -> None:
