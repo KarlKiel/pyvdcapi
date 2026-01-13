@@ -81,7 +81,7 @@ bedroom_light = hue_vdc.create_vdsd(
 
 import logging
 from typing import Dict, List, Optional, Any, Callable
-from pyvdcapi.network.genericVDC_pb2 import Message
+from pyvdcapi.network.genericVDC_pb2 import Message, VDC_SEND_ANNOUNCE_VDC
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..properties.common import CommonProperties
@@ -501,10 +501,15 @@ class Vdc:
         logger.debug(f"Setting vDC properties: {prop_dict.keys()}")
         
         # Update common properties (validates read-only)
-        self._common_props.update(prop_dict)
-        
-        # Update vDC-specific properties
-        self._vdc_props.update(prop_dict)
+        # `CommonProperties` exposes `update_from_dict` for dict updates
+        self._common_props.update_from_dict(prop_dict)
+
+        # Update vDC-specific properties (only zoneID is writable)
+        if 'zoneID' in prop_dict:
+            try:
+                self._vdc_props.set_property('zoneID', int(prop_dict['zoneID']))
+            except Exception:
+                logger.warning("Invalid zoneID value provided")
         
         # Persist changes
         vdc_config = {
@@ -556,7 +561,7 @@ class Vdc:
         
         vdsd.set_properties(properties)
     
-    def announce_to_vdsm(self) -> Message:
+    def announce_to_vdsm(self, message_id: int = 0) -> Message:
         """
         Create vDC announcement message for vdSM.
         
@@ -571,7 +576,10 @@ class Vdc:
         This is typically followed by device announcements (announce_devices).
         """
         message = Message()
-        message.type = Message.VDC_SEND_ANNOUNCE_VDC
+        message.type = VDC_SEND_ANNOUNCE_VDC
+        # Set message_id explicitly so vdSM can correlate responses.
+        # Default is 0 for announcement notifications initiated by vDC.
+        message.message_id = int(message_id)
         
         # Create announcement with vDC properties
         announce = message.vdc_send_announce_vdc

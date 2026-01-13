@@ -120,7 +120,7 @@ dimmer.on_output_change(apply_to_hardware)
 import logging
 import asyncio
 from typing import Dict, List, Optional, Any, Callable
-from pyvdcapi.network.genericVDC_pb2 import Message
+from pyvdcapi.network.genericVDC_pb2 import Message, VDC_SEND_ANNOUNCE_DEVICE
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..core.constants import DSScene, DSChannelType, DSSceneEffect
@@ -1147,7 +1147,7 @@ class VdSD:
             Message with vdc_SendAnnounceDevice
         """
         message = Message()
-        message.type = Message.VDC_SEND_ANNOUNCE_DEVICE
+        message.type = VDC_SEND_ANNOUNCE_DEVICE
         
         announce = message.vdc_send_announce_device
         announce.dSUID = self.dsuid

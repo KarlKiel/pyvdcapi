@@ -30,6 +30,7 @@ Threading Model:
 import asyncio
 import struct
 import logging
+from datetime import datetime
 from typing import Optional, Callable, Awaitable
 from pyvdcapi.network.genericVDC_pb2 import Message
 
@@ -250,12 +251,15 @@ class TCPServer:
         """
         while self._running:
             try:
+                peername = writer.get_extra_info('peername')
+                logger.debug("%s Awaiting length prefix from %s", datetime.now().isoformat(), peername)
                 # Step 1: Read the 2-byte length prefix
                 # readexactly() raises IncompleteReadError if connection closes
                 length_bytes = await reader.readexactly(MESSAGE_LENGTH_SIZE)
                 
                 # Step 2: Decode length as big-endian uint16
                 message_length = struct.unpack(MESSAGE_LENGTH_FORMAT, length_bytes)[0]
+                logger.debug("%s Read length %d from %s", datetime.now().isoformat(), message_length, peername)
                 
                 # Sanity check: ensure length is reasonable
                 if message_length == 0:
@@ -281,11 +285,16 @@ class TCPServer:
                     logger.error(f"Failed to parse protobuf message: {e}")
                     # Continue trying to read more messages
                     continue
-                
+
+                # Print decoded message to console for debugging
+                try:
+                    print("RECV:", message, flush=True)
+                except Exception:
+                    logger.debug("Failed to print received message")
+
                 logger.debug(
-                    f"Received message: type={message.type}, "
-                    f"messageId={message.message_id}, "
-                    f"size={message_length} bytes"
+                    "%s Received message from %s: type=%s, messageId=%s, size=%d bytes",
+                    datetime.now().isoformat(), peername, message.type, message.message_id, message_length
                 )
                 
                 # Step 5: Dispatch to handler
@@ -302,7 +311,8 @@ class TCPServer:
             
             except asyncio.IncompleteReadError:
                 # Connection closed by client (clean shutdown)
-                logger.info("Client closed connection")
+                peer = writer.get_extra_info('peername')
+                logger.info("Client closed connection from %s", peer)
                 break
             
             except asyncio.CancelledError:
@@ -337,6 +347,12 @@ class TCPServer:
             Exception: If serialization or sending fails
         """
         try:
+            # Print outgoing message to console before serialization
+            try:
+                print("SEND:", message, flush=True)
+            except Exception:
+                logger.debug("Failed to print outgoing message")
+
             # Step 1: Serialize protobuf to bytes
             message_bytes = message.SerializeToString()
             message_length = len(message_bytes)

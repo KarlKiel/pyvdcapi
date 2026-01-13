@@ -7,5 +7,21 @@ vdc_host:
   model_version: 0.8B
   vendor_id: KarlKiel
   api_version: '2.0'
-vdcs: {}
+vdcs:
+  000000017F9202F411B8B5822402000000:
+    dSUID: 000000017F9202F411B8B5822402000000
+    type: vDC
+    model: KarlKiel
+    modelUID: werwr
+    vendorName: KarlKiel
+    name: testVdc
+    active: true
+    displayId: ''
+    modelVersion: '1.0'
+    implementationId: x-KarlKiel-generic vDC
+    zoneID: 65534
+    capabilities:
+      metering: false
+      identification: false
+      dynamicDefinitions: true
 vdsds: {}
