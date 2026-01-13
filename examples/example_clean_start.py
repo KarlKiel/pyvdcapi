@@ -15,6 +15,7 @@ Requirements:
 import asyncio
 import logging
 import sys
+import uuid
 from pathlib import Path
 
 # Allow running from repository examples/ folder
@@ -34,18 +35,21 @@ async def main():
     logging.basicConfig(level=logging.INFO)
 
     print("Create a vDC Host — minimal interactive setup")
-    name = ask("Host name", "Demo vDC Host")
+    # Use fixed name and vendor/model metadata per request
+    name = "vDC Test Server"
     port_str = ask("Port", "8444")
     try:
         port = int(port_str)
     except Exception:
         port = 8444
 
-    mac = ask("MAC address (optional, format aa:bb:cc:dd:ee:ff)", "")
-    vendor = ask("Vendor ID", "DemoVendor")
-    model = ask("Model name", "ExampleHost")
-    model_uid = ask("Model UID", "example-host")
-    model_version = ask("Model version", "1.0")
+    # Determine host MAC address automatically
+    node = uuid.getnode()
+    mac = ":".join([f"{(node >> ele) & 0xff:02x}" for ele in range(40, -1, -8)])
+    vendor = "KarlKiel"
+    model = "TestServer"
+    model_uid = "clean_script"
+    model_version = "0.8B"
     persistence = ask("Persistence file", "example_announced_config.yaml")
 
     use_avahi_resp = ask("Use Avahi (Linux only)? (y/N)", "N").lower()
