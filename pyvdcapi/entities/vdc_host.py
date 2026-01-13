@@ -611,6 +611,12 @@ class VdcHost:
         response = Message()
         response.type = VDC_SEND_PONG
         response.message_id = message.message_id
+        # Populate vdc_SendPong submessage with host dSUID
+        try:
+            response.vdc_send_pong.dSUID = self.dsuid
+        except Exception:
+            logger.debug("Unable to set vdc_send_pong.dSUID on Pong response")
+
         return response
     
     def _handle_pong(self, message: Message) -> None:
