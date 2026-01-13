@@ -94,6 +94,8 @@ from pyvdcapi.network.genericVDC_pb2 import (
     VDSM_SEND_BYE,
     VDSM_SEND_PING,
     VDC_SEND_PONG,
+    VDC_RESPONSE_GET_PROPERTY,
+    GENERIC_RESPONSE,
     VDSM_REQUEST_GET_PROPERTY,
     VDSM_REQUEST_SET_PROPERTY,
     VDSM_REQUEST_GENERIC_REQUEST,
@@ -372,17 +374,22 @@ class VdcHost:
         
         # Close active session if any
         if self._session and self._session.is_connected():
-            # Send Bye to vdSM
-            bye_message = Message()
-            bye_message.type = Message.VDC_SEND_BYE
-            
+            # Close the writer/connection and notify session
             if self._session.writer:
                 try:
-                    await TCPServer.send_message(self._session.writer, bye_message)
+                    # Close underlying connection; don't attempt to send a Bye
+                    self._session.writer.close()
+                    try:
+                        await self._session.writer.wait_closed()
+                    except Exception:
+                        pass
                 except Exception as e:
-                    logger.error(f"Error sending Bye: {e}")
-            
-            await self._session.on_disconnected()
+                    logger.error(f"Error closing session writer: {e}")
+
+            try:
+                await self._session.on_disconnected()
+            except Exception as e:
+                logger.error(f"Error during session disconnection handling: {e}")
         
         # Stop service announcement
         if self._service_announcer:
@@ -514,13 +521,29 @@ class VdcHost:
             writer: Stream writer to send response to
         """
         try:
+            # Special-case Hello: ensure session has writer and connected state
+            from pyvdcapi.network.genericVDC_pb2 import VDSM_REQUEST_HELLO
+            if message.type == VDSM_REQUEST_HELLO:
+                # Ensure session object exists and attach writer
+                if not self._session:
+                    self._session = VdSMSession(
+                        vdc_host_dsuid=self.dsuid,
+                        on_disconnected_callback=self._on_session_disconnected
+                    )
+                # Inform session of new connection (sets writer/state)
+                try:
+                    await self._session.on_connected(writer)
+                except Exception:
+                    # on_connected may warn if state unexpected, but proceed
+                    logger.debug("Session on_connected raised during Hello handling")
+
             # Route message to appropriate handler
             response = await self._message_router.route(message)
-            
+
             # Send response if handler returned one
             if response:
                 await TCPServer.send_message(writer, response)
-        
+
         except Exception as e:
             # This should rarely happen as router catches handler exceptions
             logger.error(f"Unexpected error handling message: {e}", exc_info=True)
@@ -684,11 +707,12 @@ class VdcHost:
         
         # Build response
         response = Message()
-        response.type = Message.VDC_RESPONSE_GET_PROPERTY
+        response.type = VDC_RESPONSE_GET_PROPERTY
         response.message_id = message.message_id
         
         resp_get_prop = response.vdc_response_get_property
-        resp_get_prop.properties.CopyFrom(properties)
+        # `properties` is a list of PropertyElement messages; extend the repeated field
+        resp_get_prop.properties.extend(properties)
         
         logger.debug(f"Returning properties for {target_dsuid}")
         
@@ -740,11 +764,11 @@ class VdcHost:
             
             # Build success response
             response = Message()
-            response.type = Message.GENERIC_RESPONSE
+            response.type = GENERIC_RESPONSE
             response.message_id = message.message_id
             
             generic_resp = response.generic_response
-            generic_resp.code = 0  # Success
+            generic_resp.code = genericVDC_pb2.ERR_OK
             generic_resp.description = "OK"
             
             logger.debug(f"Properties set successfully for {target_dsuid}")
@@ -756,11 +780,11 @@ class VdcHost:
             logger.error(f"Error setting properties for {target_dsuid}: {e}")
             
             response = Message()
-            response.type = Message.GENERIC_RESPONSE
+            response.type = GENERIC_RESPONSE
             response.message_id = message.message_id
             
             generic_resp = response.generic_response
-            generic_resp.code = 500  # Error
+            generic_resp.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
             generic_resp.description = str(e)
             
             return response
@@ -1717,7 +1741,8 @@ class VdcHost:
         
         # Include properties if provided
         if properties:
-            notification.vdc_send_push_property.properties.CopyFrom(
+            # PropertyTree.to_protobuf() returns a list of PropertyElement messages
+            notification.vdc_send_push_property.properties.extend(
                 PropertyTree.to_protobuf(properties)
             )
         

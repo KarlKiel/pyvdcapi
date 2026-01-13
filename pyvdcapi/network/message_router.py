@@ -56,6 +56,9 @@ from pyvdcapi.network.genericVDC_pb2 import (
     VDSM_REQUEST_HELLO,
     VDSM_REQUEST_GET_PROPERTY,
     VDSM_REQUEST_SET_PROPERTY,
+    VDC_RESPONSE_HELLO,
+    VDC_RESPONSE_GET_PROPERTY,
+    GENERIC_RESPONSE,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,9 +77,9 @@ class MessageRouter:
     Handler Signature:
         async def handler(message: Message) -> Optional[Message]:
             # Process message
-            if message.type == Message.VDSM_REQUEST_HELLO:
+            if message.type == VDSM_REQUEST_HELLO:
                 response = Message()
-                response.type = Message.VDC_RESPONSE_HELLO
+                response.type = VDC_RESPONSE_HELLO
                 # ... configure response ...
                 return response
             return None  # For notifications
@@ -91,8 +94,8 @@ class MessageRouter:
         router = MessageRouter()
         
         # Register handlers for specific message types
-        router.register(Message.VDSM_REQUEST_HELLO, handle_hello)
-        router.register(Message.VDSM_REQUEST_GET_PROPERTY, handle_get_property)
+        router.register(VDSM_REQUEST_HELLO, handle_hello)
+        router.register(VDSM_REQUEST_GET_PROPERTY, handle_get_property)
         router.register(Message.VDSM_SEND_PING, handle_ping)
         
         # Route incoming message
@@ -184,7 +187,8 @@ class MessageRouter:
                       a generic error response is returned
         """
         message_type = message.type
-        message_id = message.message_id if message.HasField('message_id') else 0
+        # Always use the incoming message's message_id (scalar fields may not support HasField)
+        message_id = int(message.message_id)
         
         logger.debug(
             f"Routing message: type={message_type}, message_id={message_id}"
@@ -297,7 +301,7 @@ class MessageRouter:
             Generic error response Message
         """
         response = Message()
-        response.type = Message.GENERIC_RESPONSE
+        response.type = GENERIC_RESPONSE
         response.message_id = message_id
         
         # Set error in response
