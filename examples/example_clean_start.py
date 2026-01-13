@@ -46,6 +46,7 @@ async def main():
     # Determine host MAC address automatically
     node = uuid.getnode()
     mac = ":".join([f"{(node >> ele) & 0xff:02x}" for ele in range(40, -1, -8)])
+    print(f"Detected MAC address: {mac}")
     vendor = "KarlKiel"
     model = "TestServer"
     model_uid = "clean_script"
