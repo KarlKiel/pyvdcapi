@@ -84,8 +84,10 @@ asyncio.run(main())
 ```
 pyvdcapi/
 ├── proto/                 # Protocol buffer definitions
-│   ├── genericVDC.proto   # vDC API protocol definition
-│   └── genericVDC_pb2.py  # Generated Python protobuf code
+│   └── genericVDC.proto   # vDC API protocol definition
+├── pyvdcapi/              # Main package
+│   ├── network/           # Protocol communication
+│   │   └── genericVDC_pb2.py  # Generated Python protobuf code (packaged)
 ├── pyvdcapi/              # Main package
 │   ├── core/              # Core domain logic
 │   │   ├── constants.py   # digitalSTROM constants (scenes, channels, groups)

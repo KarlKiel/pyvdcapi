@@ -28,10 +28,8 @@ import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-import proto.genericVDC_pb2 as pb
-from proto.genericVDC_pb2 import (
+from pyvdcapi.network import genericVDC_pb2 as pb
+from pyvdcapi.network.genericVDC_pb2 import (
     Message,
     VDSM_REQUEST_HELLO,
     VDC_RESPONSE_HELLO,
@@ -44,9 +42,8 @@ from proto.genericVDC_pb2 import (
     VDSM_NOTIFICATION_CALL_SCENE,
     VDSM_NOTIFICATION_SAVE_SCENE,
     VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE,
-    VDSM_SEND_BYE
+    VDSM_SEND_BYE,
 )
-
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,

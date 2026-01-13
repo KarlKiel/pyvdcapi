@@ -88,7 +88,7 @@ Threading Model:
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any, Callable, Awaitable
-from proto.genericVDC_pb2 import (
+from pyvdcapi.network.genericVDC_pb2 import (
     Message,
     VDSM_REQUEST_HELLO,
     VDSM_SEND_BYE,
@@ -108,6 +108,7 @@ from proto.genericVDC_pb2 import (
     VDSM_NOTIFICATION_DIM_CHANNEL,
     VDSM_NOTIFICATION_SET_CONTROL_VALUE,
 )
+import pyvdcapi.network.genericVDC_pb2 as genericVDC_pb2
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..network.tcp_server import TCPServer
@@ -174,6 +175,7 @@ class VdcHost:
         enable_backup: bool = True,
         announce_service: bool = False,
         use_avahi: bool = False,
+        service_host_name: Optional[str] = None,
         **properties
     ):
         """
@@ -278,6 +280,7 @@ class VdcHost:
             self._service_announcer = ServiceAnnouncer(
                 port=self.port,
                 dsuid=self.dsuid,
+                host_name=service_host_name,
                 use_avahi=use_avahi
             )
             logger.info(

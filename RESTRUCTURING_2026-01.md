@@ -24,12 +24,12 @@ The repository has been reorganized to follow Python best practices with proper 
 ### 2. Protocol Buffer Files Organization
 
 **Moved file:**
-- `genericVDC_pb2.py` → `proto/genericVDC_pb2.py`
+- `genericVDC_pb2.py` → `pyvdcapi/network/genericVDC_pb2.py`
 
 **Created:**
-- `proto/__init__.py` - Makes proto a proper Python package
+- `pyvdcapi/network/__init__.py` - Keeps generated protobuf inside package namespace
 
-**Rationale:** Protocol buffer files should be co-located with the `.proto` definition file in the `proto/` directory.
+**Rationale:** The generated Python protobuf module is now packaged under `pyvdcapi.network` so it can be imported consistently from the package (e.g. `from pyvdcapi.network import genericVDC_pb2`).
 
 ### 3. Import Statements Updated
 
@@ -49,11 +49,11 @@ All files referencing `genericVDC_pb2` were updated to use the new location:
 ```python
 # Before
 from genericVDC_pb2 import Message
-import genericVDC_pb2 as pb
+import genericV_pb2 as pb
 
 # After
-from proto.genericVDC_pb2 import Message
-import proto.genericVDC_pb2 as pb
+from pyvdcapi.network import genericVDC_pb2
+from pyvdcapi.network.genericVDC_pb2 import Message
 ```
 
 ### 4. Documentation Updates
@@ -128,7 +128,7 @@ $ python -c "from examples.vdsm_simulator import VdsmSimulator; from pyvdcapi im
 
 ## Backwards Compatibility
 
-⚠️ **Breaking Change:** Any external code importing `genericVDC_pb2` directly will need to update imports to `proto.genericVDC_pb2`.
+⚠️ **Breaking Change:** Any external code importing `genericVDC_pb2` directly will need to update imports to `pyvdcapi.network.genericVDC_pb2` (for example: `from pyvdcapi.network import genericVDC_pb2`).
 
 All internal code has been updated and tested.
 

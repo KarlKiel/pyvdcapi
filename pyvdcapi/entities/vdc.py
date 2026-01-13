@@ -81,7 +81,7 @@ bedroom_light = hue_vdc.create_vdsd(
 
 import logging
 from typing import Dict, List, Optional, Any, Callable
-from proto.genericVDC_pb2 import Message
+from pyvdcapi.network.genericVDC_pb2 import Message
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..properties.common import CommonProperties

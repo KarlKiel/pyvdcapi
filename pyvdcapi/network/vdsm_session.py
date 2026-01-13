@@ -51,7 +51,7 @@ import logging
 import random
 from enum import Enum
 from typing import Optional, Callable, Awaitable
-from proto.genericVDC_pb2 import (
+from pyvdcapi.network.genericVDC_pb2 import (
     Message,
     VDC_RESPONSE_HELLO,
     VDSM_SEND_PING,

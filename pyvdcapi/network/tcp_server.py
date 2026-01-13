@@ -31,7 +31,7 @@ import asyncio
 import struct
 import logging
 from typing import Optional, Callable, Awaitable
-from proto.genericVDC_pb2 import Message
+from pyvdcapi.network.genericVDC_pb2 import Message
 
 logger = logging.getLogger(__name__)
 

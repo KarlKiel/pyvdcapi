@@ -17,6 +17,7 @@ import logging
 import sys
 import uuid
 from pathlib import Path
+import socket
 
 # Allow running from repository examples/ folder
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -56,6 +57,9 @@ async def main():
     use_avahi_resp = ask("Use Avahi (Linux only)? (y/N)", "N").lower()
     use_avahi = use_avahi_resp in ("y", "yes")
 
+    # Determine a sensible host name for service announcement (use FQDN)
+    service_host_name = socket.getfqdn()
+
     # Create the host with service announcement enabled
     host = VdcHost(
         name=name,
@@ -68,6 +72,7 @@ async def main():
         persistence_file=persistence,
         announce_service=True,
         use_avahi=use_avahi,
+        service_host_name=service_host_name,
     )
 
     print(f"Created vDC host: {host._common_props.get_name()}")

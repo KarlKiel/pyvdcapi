@@ -5,7 +5,7 @@ Provides bidirectional conversion for property trees matching the vDC API struct
 """
 
 from typing import Any, Dict, List, Optional, Union
-import proto.genericVDC_pb2 as pb
+from pyvdcapi.network import genericVDC_pb2 as pb
 import logging
 
 logger = logging.getLogger(__name__)
