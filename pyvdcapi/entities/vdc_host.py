@@ -198,17 +198,6 @@ class VdcHost:
             announce_service: Enable mDNS/DNS-SD service announcement for auto-discovery (default: False)
             use_avahi: Use Avahi daemon instead of zeroconf library (requires Linux + root, default: False)
             **properties: Additional host properties
-        
-        Example:
-            host = VdcHost(
-                name="Home Automation Hub",
-                port=8444,
-                mac_address="00:11:22:33:44:55",
-                vendor_id="MyCompany",
-                model="HomeHub",
-                model_uid="home-hub",
-                model_version="2.0"
-            )
         """
         # Store for later use in creating vDCs
         self._mac_address = mac_address
@@ -654,11 +643,10 @@ class VdcHost:
         Args:
             message: vdc_SendPong message
         """
-        logger.debug("Received Pong from vdSM")
-        
-        if self._session:
-            # Forward pong message to session for id-based correlation
-            self._session.on_pong_received(message)
+        # Keep behavior minimal: log the received Pong but do not forward it
+        # to the session. The session no longer initiates pings or manages
+        # pong correlation, so forwarding would call a removed API.
+        logger.debug("Received Pong from vdSM (no-op forwarding)")
     
     async def _handle_get_property(self, message: Message) -> Optional[Message]:
         """
@@ -780,12 +768,10 @@ class VdcHost:
             logger.error(f"Error setting properties for {target_dsuid}: {e}")
             
             response = Message()
-            response.type = GENERIC_RESPONSE
             response.message_id = message.message_id
-            
-            generic_resp = response.generic_response
-            generic_resp.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
-            generic_resp.description = str(e)
+            response.generic_response.SetInParent()
+            response.generic_response.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
+            response.generic_response.description = str(e)
             
             return response
     
@@ -1481,7 +1467,6 @@ class VdcHost:
             params = PropertyTree.from_protobuf(request.params) if request.HasField('params') else {}
             
             logger.info(f"Generic request: {method_name} on {dsuid or 'host'} with params {params}")
-            
             result = None
             
             # If dSUID is specified, find device
@@ -1513,7 +1498,7 @@ class VdcHost:
                     response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_IMPLEMENTED
                     response.vdc_response_generic_response.description = f"Action '{method_name}' not found on device"
                     return response
-            
+                
             else:
                 # Host-level generic request
                 # Could implement host-level actions here
@@ -1523,7 +1508,7 @@ class VdcHost:
                 response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_IMPLEMENTED
                 response.vdc_response_generic_response.description = "Host-level actions not implemented"
                 return response
-            
+                
             # Send successful response with result
             response = Message()
             response.message_id = message.message_id
@@ -1537,7 +1522,7 @@ class VdcHost:
                 )
             
             return response
-            
+        
         except Exception as e:
             logger.error(f"Error handling GenericRequest: {e}", exc_info=True)
             
