@@ -1,4 +1,3 @@
-"""
 vdSM session management for vDC API protocol.
 
 A vdSM (virtualDeviceConnector Smart Manager) session represents the
@@ -12,49 +11,23 @@ Session Lifecycle:
 5. vdSM sends Bye or connection closes
 6. Session ends
 
-Session State Machine:
-┌─────────────┐
-│ DISCONNECTED│
-└──────┬──────┘
-       │ TCP connect
-       ▼
-┌─────────────┐
-│  CONNECTED  │
-└──────┬──────┘
-       │ Hello received
-       ▼
-┌─────────────┐
-│ HELLO_RCVD  │◄──┐
-└──────┬──────┘   │
-       │ Hello sent│ Ping/Pong
-       ▼           │
-┌─────────────┐   │
-│  ACTIVE     │───┘
-└──────┬──────┘
-       │ Bye/disconnect
-       ▼
-┌─────────────┐
-│ DISCONNECTED│
-└─────────────┘
-
 The session manager:
 - Tracks session state
 - Handles Hello/Bye protocol
-- Manages ping/pong keepalive
 - Enforces protocol requirements
 - Provides session info for routing
-"""
+
+Note: Keep-alive initiation/monitoring has been removed. The session
+still answers received SendPing messages with SendPong.
 
 import asyncio
 import time
 import logging
-import random
 from enum import Enum
 from typing import Optional, Callable, Awaitable
 from pyvdcapi.network.genericVDC_pb2 import (
     Message,
     VDC_RESPONSE_HELLO,
-    VDSM_SEND_PING,
     VDC_SEND_PONG,
 )
 
@@ -85,49 +58,34 @@ class VdSMSession:
     Responsibilities:
     - Track session state (disconnected -> active -> closing)
     - Handle Hello/Bye handshake protocol
-    - Manage ping/pong keepalive mechanism
-    - Enforce protocol timing requirements
     - Provide session metadata
     
     The vDC API requires:
     - vdSM must send Hello as first message
     - vDC host must respond with Hello containing its dSUID
-    - Ping messages should be answered with Pong
-    - Sessions should timeout if no activity for extended period
+    - Ping messages received from vdSM are answered with Pong
     
     Usage:
         session = VdSMSession(vdc_host_dsuid="00000000...")
-        
+
         # When TCP connection established
         await session.on_connected(writer)
-        
+
         # When Hello received
         await session.on_hello_received(hello_message)
         hello_response = session.create_hello_response()
-        
+
         # Normal operation
         assert session.is_active()
-        
+
         # When Bye received or connection closes
         await session.on_disconnected()
-    
-    Attributes:
-        vdc_host_dsuid: dSUID of the vDC host
-        state: Current session state
-        vdsm_version: Version string from vdSM Hello message
-        connected_at: Timestamp when connection was established
     """
     
     # Protocol timing constants
-    # Do not initiate Ping messages from our side. Instead monitor
-    # inbound activity and close the connection if nothing is received
-    # for INACTIVITY_TIMEOUT seconds.
-    INACTIVITY_TIMEOUT = 60.0  # Close if no incoming messages for 60s
-    INACTIVITY_CHECK_INTERVAL = 5.0  # How often to check inactivity
     HELLO_TIMEOUT = 30.0  # vdSM must send Hello within 30 seconds
     
-    def __init__(
-        self,
+    def __init__(self,
         vdc_host_dsuid: str,
         on_disconnected_callback: Optional[Callable[[], Awaitable[None]]] = None
     ):
@@ -151,12 +109,8 @@ class VdSMSession:
         self.last_activity: Optional[float] = None
         self.client_address: Optional[tuple] = None
         
-        # Keepalive management
-        self._ping_task: Optional[asyncio.Task] = None
-        self._pong_received = asyncio.Event()
+        # Hello timeout task
         self._hello_timer: Optional[asyncio.Task] = None
-        # Track last ping id for correlation with incoming Pong
-        self._last_ping_id: Optional[int] = None
     
     async def on_connected(self, writer: asyncio.StreamWriter) -> None:
         """
@@ -257,8 +211,7 @@ class VdSMSession:
         
         After the vDC host sends Hello response:
         1. Session is now fully active
-        2. Start ping/pong keepalive mechanism
-        3. Normal message processing can begin
+        2. Normal message processing can begin
         """
         if self.state != SessionState.HELLO_RECEIVED:
             logger.warning(
@@ -268,9 +221,6 @@ class VdSMSession:
         
         self.state = SessionState.ACTIVE
         self.last_activity = time.time()
-        
-        # Start keepalive ping mechanism
-        self._ping_task = asyncio.create_task(self._keepalive_loop())
         
         logger.info("vdSM session now ACTIVE")
     
@@ -303,21 +253,6 @@ class VdSMSession:
             logger.debug("Unable to set vdc_send_pong.dSUID on Pong message")
 
         return message
-    
-    def on_pong_received(self, pong_message: Message) -> None:
-        """
-        Handle Pong message from vdSM.
-
-        Pong is a response to our Ping. We only treat it as a response
-        to our outstanding Ping if the message_id matches the last ping id.
-        """
-        self.last_activity = time.time()
-        # If this Pong matches the last ping we sent, signal receipt
-        if self._last_ping_id is not None and pong_message.message_id == self._last_ping_id:
-            self._pong_received.set()
-            logger.debug("Received Pong matching last ping id %s", self._last_ping_id)
-        else:
-            logger.debug("Received Pong with id %s (no matching outstanding ping)", pong_message.message_id)
     
     async def on_bye_received(self, bye_message: Message) -> None:
         """
@@ -353,15 +288,6 @@ class VdSMSession:
             f"vdSM session disconnected from {self.client_address}, "
             f"state was {self.state}"
         )
-        
-        # Cancel background tasks
-        if self._ping_task:
-            self._ping_task.cancel()
-            try:
-                await self._ping_task
-            except asyncio.CancelledError:
-                pass
-            self._ping_task = None
         
         if self._hello_timer:
             self._hello_timer.cancel()
@@ -434,63 +360,3 @@ class VdSMSession:
         except asyncio.CancelledError:
             # Normal cancellation when Hello is received
             pass
-    
-    async def _keepalive_loop(self) -> None:
-        """
-        Background task: Send periodic Ping messages.
-        
-        Sends Ping every PING_INTERVAL seconds if no other activity.
-        If Pong isn't received within PONG_TIMEOUT, considers connection dead.
-        
-        This ensures:
-        - Detection of dead connections (network failures)
-        - Prevention of idle connection timeouts by firewalls/proxies
-        """
-        try:
-            while self.state == SessionState.ACTIVE:
-                # Wait for ping interval
-                await asyncio.sleep(self.PING_INTERVAL)
-                
-                # Check if we've had recent activity
-                # If so, skip ping (no need to ping if actively communicating)
-                if self.last_activity and (time.time() - self.last_activity) < self.PING_INTERVAL:
-                    continue
-                
-                # Send Ping
-                logger.debug("Sending Ping to vdSM")
-                ping_message = Message()
-                ping_message.type = VDSM_SEND_PING
-
-                # Assign a non-zero random message id for correlation
-                ping_message.message_id = random.getrandbits(31)
-                self._last_ping_id = ping_message.message_id
-
-                if self.writer:
-                    from .tcp_server import TCPServer
-                    # Clear previous pong event before sending a new ping
-                    self._pong_received.clear()
-                    await TCPServer.send_message(self.writer, ping_message)
-
-                    # Wait for Pong with timeout
-                    try:
-                        await asyncio.wait_for(
-                            self._pong_received.wait(),
-                            timeout=self.PONG_TIMEOUT
-                        )
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            f"Pong timeout - no response from vdSM within "
-                            f"{self.PONG_TIMEOUT} seconds, closing connection"
-                        )
-                        
-                        # Connection is dead
-                        self.writer.close()
-                        await self.writer.wait_closed()
-                        await self.on_disconnected()
-                        break
-        
-        except asyncio.CancelledError:
-            # Normal cancellation on disconnect
-            pass
-        except Exception as e:
-            logger.error(f"Error in keepalive loop: {e}", exc_info=True)
