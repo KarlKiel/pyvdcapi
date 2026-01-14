@@ -1,0 +1,20 @@
+vdc_host:
+  dSUID: 00000000D66A76283662AD6D7925000000
+  type: vDChost
+  name: Test Host
+  model: vDC Host
+  model_uid: vdc-host
+  model_version: '1.0'
+  vendor_id: KarlKiel
+  api_version: '2.0'
+vdcs:
+  00000001D66A76283662AD6D7925000000:
+    dSUID: 00000001D66A76283662AD6D7925000000
+    type: vDC
+    model: testModel
+    model_uid: testmodel
+    model_version: '1.0'
+    vendor_id: KarlKiel
+    enumeration: 0
+    name: testVdc
+vdsds: {}
