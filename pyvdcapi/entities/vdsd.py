@@ -1109,10 +1109,17 @@ class VdSD:
         # Add device properties
         props.update(self.device_properties.to_dict())
         
-        # TODO: Filter based on query (if query specifies subset)
-        
+        # If a query is provided, filter the properties accordingly
+        try:
+            if query and len(query) > 0:
+                filtered = PropertyTree.filter_dict_by_query(props, query)
+            else:
+                filtered = props
+        except Exception:
+            filtered = props
+
         # Convert to PropertyElement tree
-        return PropertyTree.to_protobuf(props)
+        return PropertyTree.to_protobuf(filtered)
     
     def set_properties(self, properties: Any) -> None:
         """

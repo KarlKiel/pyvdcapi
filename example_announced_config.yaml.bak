@@ -12,7 +12,7 @@ vdcs:
     dSUID: 000000017F9202F411B8B5822402000000
     type: vDC
     model: KarlKiel
-    modelUID: werwr
+    modelUID: demomodel
     vendorName: KarlKiel
     name: testVdc
     active: true
