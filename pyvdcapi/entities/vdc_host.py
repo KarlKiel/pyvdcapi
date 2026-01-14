@@ -807,8 +807,17 @@ class VdcHost:
         host_dict['vdc_count'] = len(self._vdcs)
         host_dict['connected'] = self._session.is_connected() if self._session else False
         
+        # If a query is provided, filter host properties accordingly
+        try:
+            if query and len(query) > 0:
+                filtered = PropertyTree.filter_dict_by_query(host_dict, query)
+            else:
+                filtered = host_dict
+        except Exception:
+            filtered = host_dict
+
         # Convert to PropertyElement tree
-        return PropertyTree.to_protobuf(host_dict)
+        return PropertyTree.to_protobuf(filtered)
     
     def _set_host_properties(self, properties) -> None:
         """

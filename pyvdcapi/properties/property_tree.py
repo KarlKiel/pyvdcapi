@@ -270,3 +270,75 @@ class PropertyTree:
         
         # Set the final value
         current[parts[-1]] = value
+
+    @staticmethod
+    def filter_dict_by_query(data: Dict[str, Any], query_elements: List[pb.PropertyElement]) -> Dict[str, Any]:
+        """
+        Return a new dictionary containing only the keys/subtrees requested by the
+        provided PropertyElement query.
+
+        Args:
+            data: Full property dictionary
+            query_elements: List of PropertyElement messages describing requested keys
+
+        Returns:
+            Filtered dictionary with only requested properties/subtrees
+        """
+        result: Dict[str, Any] = {}
+
+        for elem in query_elements:
+            key = elem.name
+
+            # If name empty, treat as wildcard/selector for current level - include nothing here
+            if not key:
+                continue
+
+            # If property not present in source, skip
+            if key not in data:
+                continue
+
+            value = data[key]
+
+            # If no nested query elements, include the value as-is
+            if len(elem.elements) == 0:
+                result[key] = value
+                continue
+
+            # If nested elements exist and the single child is an empty-name terminator,
+            # treat this as a leaf request (include the property's value)
+            if len(elem.elements) == 1 and elem.elements[0].name == "":
+                result[key] = value
+                continue
+
+            # Otherwise, recurse into dicts/lists where appropriate
+            if isinstance(value, dict):
+                filtered = PropertyTree.filter_dict_by_query(value, elem.elements)
+                result[key] = filtered
+            elif isinstance(value, list):
+                # If child selectors are numeric indices, select those; else include full list
+                if any(child.name.isdigit() for child in elem.elements if child.name):
+                    new_list: List[Any] = []
+                    for child in elem.elements:
+                        if not child.name:
+                            # wildcard - include full list
+                            new_list = value
+                            break
+                        if child.name.isdigit():
+                            idx = int(child.name)
+                            if 0 <= idx < len(value):
+                                if len(child.elements) == 0 or (len(child.elements) == 1 and child.elements[0].name == ""):
+                                    new_list.append(value[idx])
+                                else:
+                                    if isinstance(value[idx], dict):
+                                        new_list.append(PropertyTree.filter_dict_by_query(value[idx], child.elements))
+                                    else:
+                                        new_list.append(value[idx])
+                    result[key] = new_list
+                else:
+                    # No index selectors - include list as-is
+                    result[key] = value
+            else:
+                # Primitive value with nested query - nothing to drill into, include value
+                result[key] = value
+
+        return result

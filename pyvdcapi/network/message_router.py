@@ -236,19 +236,26 @@ class MessageRouter:
             return response
         
         except Exception as e:
-            # Handler raised an exception
+            # Special-case ValueError 'not found' to avoid noisy stack traces
+            if isinstance(e, ValueError) and 'not found' in str(e).lower():
+                logger.debug(f"Handler reported not-found for message type {message_type}: {e}")
+                if self._is_request_type(message_type):
+                    return self._create_error_response(message_id, str(e))
+                return None
+
+            # Handler raised an unexpected exception - log full traceback
             logger.error(
                 f"Error in handler for message type {message_type}: {e}",
                 exc_info=True
             )
-            
+
             # Return error response if this was a request
             if self._is_request_type(message_type):
                 return self._create_error_response(
                     message_id,
                     f"Internal error: {str(e)}"
                 )
-            
+
             return None
     
     def _is_request_type(self, message_type: int) -> bool:
@@ -304,14 +311,46 @@ class MessageRouter:
         response.type = GENERIC_RESPONSE
         response.message_id = message_id
         
-        # Set error in response
-        # Note: Field structure depends on your protobuf definition
+        # Set error in response (map to valid protobuf ResultCode)
+        # Import pb module locally to avoid adding a top-level dependency
+        try:
+            import pyvdcapi.network.genericVDC_pb2 as pb
+        except Exception:
+            # Fallback: set unknown message code
+            generic_response = response.generic_response
+            generic_response.code = 1  # ERR_MESSAGE_UNKNOWN (best-effort)
+            generic_response.description = error_message
+            logger.debug(f"Created fallback error response: msg='{error_message}'")
+            return response
+
+        # Collect valid ERR_* enum values from the pb module
+        valid_err_values = {getattr(pb, n) for n in dir(pb) if n.startswith('ERR_')}
+
+        # Determine which ResultCode to use
+        code_val: int
+        if isinstance(error_code, int) and error_code in valid_err_values:
+            code_val = error_code
+        else:
+            m = error_message.lower() if error_message else ''
+            if 'not found' in m:
+                code_val = pb.ERR_NOT_FOUND
+            elif 'not implemented' in m:
+                code_val = pb.ERR_NOT_IMPLEMENTED
+            elif 'forbidden' in m:
+                code_val = pb.ERR_FORBIDDEN
+            elif 'incompatible' in m or 'incompatible api' in m:
+                code_val = pb.ERR_INCOMPATIBLE_API
+            elif 'service not available' in m:
+                code_val = pb.ERR_SERVICE_NOT_AVAILABLE
+            else:
+                code_val = pb.ERR_MESSAGE_UNKNOWN
+
         generic_response = response.generic_response
-        generic_response.code = error_code
+        generic_response.code = code_val
         generic_response.description = error_message
-        
-        logger.debug(f"Created error response: code={error_code}, msg='{error_message}'")
-        
+
+        logger.debug(f"Created error response: code={code_val}, msg='{error_message}'")
+
         return response
     
     def register_handlers(

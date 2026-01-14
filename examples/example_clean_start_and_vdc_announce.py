@@ -32,10 +32,30 @@ def ask(prompt: str, default: str = "") -> str:
 
     If a default is provided and the user enters nothing, the default is used.
     """
+    # Print the prompt to the original stdout so we can suppress
+    # background stdout/stderr while the user types without hiding the prompt.
+    orig_stdout = sys.__stdout__
+    orig_stderr = sys.__stderr__
+
     if default:
-        resp = input(f"{prompt} [{default}]: ")
-        return resp.strip() or default
-    return input(f"{prompt}: ").strip()
+        print(f"{prompt} [{default}]: ", end='', file=orig_stdout, flush=True)
+    else:
+        print(f"{prompt}: ", end='', file=orig_stdout, flush=True)
+
+    # Temporarily redirect stdout/stderr to /dev/null to avoid background
+    # messages (prints and logging) from interfering with interactive input.
+    with open(os.devnull, 'w') as devnull:
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = devnull, devnull
+        try:
+            resp = input()
+        finally:
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    resp = resp.strip()
+    if default and resp == '':
+        return default
+    return resp
 
 
 async def main():

@@ -1,0 +1,11 @@
+vdc_host:
+  dSUID: 000000009921982A82E56758C770000000
+  type: vDChost
+  name: Headless Test Host
+  model: HeadlessModel
+  model_uid: headless
+  model_version: '0.1'
+  vendor_id: TestVendor
+  api_version: '2.0'
+vdcs: {}
+vdsds: {}
