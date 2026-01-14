@@ -119,8 +119,11 @@ class VdSMSession:
     """
     
     # Protocol timing constants
-    PING_INTERVAL = 60.0  # Send ping every 60 seconds if no activity
-    PONG_TIMEOUT = 10.0   # Expect pong within 10 seconds
+    # Do not initiate Ping messages from our side. Instead monitor
+    # inbound activity and close the connection if nothing is received
+    # for INACTIVITY_TIMEOUT seconds.
+    INACTIVITY_TIMEOUT = 60.0  # Close if no incoming messages for 60s
+    INACTIVITY_CHECK_INTERVAL = 5.0  # How often to check inactivity
     HELLO_TIMEOUT = 30.0  # vdSM must send Hello within 30 seconds
     
     def __init__(
