@@ -236,19 +236,26 @@ class MessageRouter:
             return response
         
         except Exception as e:
-            # Handler raised an exception
+            # Special-case ValueError 'not found' to avoid noisy stack traces
+            if isinstance(e, ValueError) and 'not found' in str(e).lower():
+                logger.debug(f"Handler reported not-found for message type {message_type}: {e}")
+                if self._is_request_type(message_type):
+                    return self._create_error_response(message_id, str(e))
+                return None
+
+            # Handler raised an unexpected exception - log full traceback
             logger.error(
                 f"Error in handler for message type {message_type}: {e}",
                 exc_info=True
             )
-            
+
             # Return error response if this was a request
             if self._is_request_type(message_type):
                 return self._create_error_response(
                     message_id,
                     f"Internal error: {str(e)}"
                 )
-            
+
             return None
     
     def _is_request_type(self, message_type: int) -> bool:
