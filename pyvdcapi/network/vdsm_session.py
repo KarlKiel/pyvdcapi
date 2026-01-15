@@ -195,7 +195,14 @@ class VdSMSession:
         """
         message = Message()
         message.type = VDC_RESPONSE_HELLO
-        message.message_id = request_message.message_id
+        # Only set message_id if the request provided a non-zero id
+        try:
+            if int(request_message.message_id) != 0:
+                message.message_id = request_message.message_id
+        except Exception:
+            # If the request has no message_id attribute or conversion fails,
+            # leave message_id unset (default 0)
+            pass
         
         # Set up response with vDC host dSUID
         # Note: Actual field structure depends on your protobuf definition
@@ -241,10 +248,14 @@ class VdSMSession:
         self.last_activity = time.time()
         logger.debug("Received Ping, sending Pong")
         
-        # Create Pong response with same message ID and payload
+        # Create Pong response with same message ID and payload (only if provided)
         message = Message()
         message.type = VDC_SEND_PONG
-        message.message_id = ping_message.message_id
+        try:
+            if int(ping_message.message_id) != 0:
+                message.message_id = ping_message.message_id
+        except Exception:
+            pass
 
         # Populate the vdc_SendPong submessage (include host dSUID)
         try:

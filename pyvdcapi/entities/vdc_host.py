@@ -625,7 +625,11 @@ class VdcHost:
         # If no session, still respond with Pong
         response = Message()
         response.type = VDC_SEND_PONG
-        response.message_id = message.message_id
+        try:
+            if int(message.message_id) != 0:
+                response.message_id = message.message_id
+        except Exception:
+            pass
         # Populate vdc_SendPong submessage with host dSUID
         try:
             response.vdc_send_pong.dSUID = self.dsuid
@@ -696,7 +700,11 @@ class VdcHost:
         # Build response
         response = Message()
         response.type = VDC_RESPONSE_GET_PROPERTY
-        response.message_id = message.message_id
+        try:
+            if int(message.message_id) != 0:
+                response.message_id = message.message_id
+        except Exception:
+            pass
         
         resp_get_prop = response.vdc_response_get_property
         # `properties` is a list of PropertyElement messages; extend the repeated field
@@ -753,7 +761,11 @@ class VdcHost:
             # Build success response
             response = Message()
             response.type = GENERIC_RESPONSE
-            response.message_id = message.message_id
+            try:
+                if int(message.message_id) != 0:
+                    response.message_id = message.message_id
+            except Exception:
+                pass
             
             generic_resp = response.generic_response
             generic_resp.code = genericVDC_pb2.ERR_OK
@@ -768,7 +780,11 @@ class VdcHost:
             logger.error(f"Error setting properties for {target_dsuid}: {e}")
             
             response = Message()
-            response.message_id = message.message_id
+            try:
+                if int(message.message_id) != 0:
+                    response.message_id = message.message_id
+            except Exception:
+                pass
             response.generic_response.SetInParent()
             response.generic_response.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
             response.generic_response.description = str(e)
@@ -1398,7 +1414,11 @@ class VdcHost:
             if device is None or owning_vdc is None:
                 # Device not found - send error
                 response = Message()
-                response.message_id = message.message_id
+                try:
+                    if int(message.message_id) != 0:
+                        response.message_id = message.message_id
+                except Exception:
+                    pass
                 response.vdc_send_remove_result.SetInParent()
                 response.vdc_send_remove_result.code = genericVDC_pb2.ERROR_NOT_FOUND
                 response.vdc_send_remove_result.description = f"Device {dsuid} not found"
@@ -1409,7 +1429,11 @@ class VdcHost:
             
             # Send success response
             response = Message()
-            response.message_id = message.message_id
+            try:
+                if int(message.message_id) != 0:
+                    response.message_id = message.message_id
+            except Exception:
+                pass
             response.vdc_send_remove_result.SetInParent()
             response.vdc_send_remove_result.code = genericVDC_pb2.ERROR_OK
             
@@ -1425,7 +1449,11 @@ class VdcHost:
             
             # Send error response
             response = Message()
-            response.message_id = message.message_id
+            try:
+                if int(message.message_id) != 0:
+                    response.message_id = message.message_id
+            except Exception:
+                pass
             response.vdc_send_remove_result.SetInParent()
             response.vdc_send_remove_result.code = genericVDC_pb2.ERROR_INTERNAL
             response.vdc_send_remove_result.description = str(e)
@@ -1480,7 +1508,11 @@ class VdcHost:
                 if device is None:
                     # Device not found
                     response = Message()
-                    response.message_id = message.message_id
+                    try:
+                        if int(message.message_id) != 0:
+                            response.message_id = message.message_id
+                    except Exception:
+                        pass
                     response.vdc_response_generic_response.SetInParent()
                     response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_FOUND
                     response.vdc_response_generic_response.description = f"Device {dsuid} not found"
@@ -1493,7 +1525,11 @@ class VdcHost:
                 else:
                     # Action not found
                     response = Message()
-                    response.message_id = message.message_id
+                    try:
+                        if int(message.message_id) != 0:
+                            response.message_id = message.message_id
+                    except Exception:
+                        pass
                     response.vdc_response_generic_response.SetInParent()
                     response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_IMPLEMENTED
                     response.vdc_response_generic_response.description = f"Action '{method_name}' not found on device"
@@ -1503,7 +1539,11 @@ class VdcHost:
                 # Host-level generic request
                 # Could implement host-level actions here
                 response = Message()
-                response.message_id = message.message_id
+                try:
+                    if int(message.message_id) != 0:
+                        response.message_id = message.message_id
+                except Exception:
+                    pass
                 response.vdc_response_generic_response.SetInParent()
                 response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_IMPLEMENTED
                 response.vdc_response_generic_response.description = "Host-level actions not implemented"
@@ -1511,7 +1551,11 @@ class VdcHost:
                 
             # Send successful response with result
             response = Message()
-            response.message_id = message.message_id
+            try:
+                if int(message.message_id) != 0:
+                    response.message_id = message.message_id
+            except Exception:
+                pass
             response.vdc_response_generic_response.SetInParent()
             response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_OK
             
@@ -1528,7 +1572,11 @@ class VdcHost:
             
             # Send error response
             response = Message()
-            response.message_id = message.message_id
+            try:
+                if int(message.message_id) != 0:
+                    response.message_id = message.message_id
+            except Exception:
+                pass
             response.vdc_response_generic_response.SetInParent()
             response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_INTERNAL
             response.vdc_response_generic_response.description = str(e)

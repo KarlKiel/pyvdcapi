@@ -583,9 +583,15 @@ class Vdc:
         """
         message = Message()
         message.type = VDC_SEND_ANNOUNCE_VDC
-        # Set message_id explicitly so vdSM can correlate responses.
-        # Default is 0 for announcement notifications initiated by vDC.
-        message.message_id = int(message_id)
+        # Set message_id only when a non-zero id was provided.
+        # Default is 0 for announcement notifications initiated by vDC
+        # and should not be sent in the envelope.
+        try:
+            if int(message_id) != 0:
+                message.message_id = int(message_id)
+        except Exception:
+            # If conversion fails, do not set message_id (treat as notification)
+            pass
         
         # Create announcement with vDC properties
         announce = message.vdc_send_announce_vdc

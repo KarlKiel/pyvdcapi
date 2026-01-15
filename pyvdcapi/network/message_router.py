@@ -221,10 +221,15 @@ class MessageRouter:
             # If handler returned a response, ensure message_id is set
             if response:
                 # Ensure response echoes the incoming message_id so that
-                # notification-style requests (e.g. vdsm_SendPing) get
-                # a Pong with the same id. Copy unconditionally — the
-                # value will be 0 if the request did not include an id.
-                response.message_id = message.message_id
+                # request/response correlation works. Only copy the id
+                # when the request actually provided one (non-zero).
+                try:
+                    if int(message.message_id) != 0:
+                        response.message_id = message.message_id
+                except Exception:
+                    # Fallback: if message has no message_id attribute or
+                    # conversion fails, do not set it.
+                    pass
 
                 logger.debug(
                     f"Handler returned response: type={response.type}, "
@@ -309,7 +314,11 @@ class MessageRouter:
         """
         response = Message()
         response.type = GENERIC_RESPONSE
-        response.message_id = message_id
+        try:
+            if int(message_id) != 0:
+                response.message_id = int(message_id)
+        except Exception:
+            pass
         
         # Set error in response (map to valid protobuf ResultCode)
         # Import pb module locally to avoid adding a top-level dependency
