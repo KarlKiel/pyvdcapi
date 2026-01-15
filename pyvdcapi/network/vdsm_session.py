@@ -48,7 +48,6 @@ The session manager:
 import asyncio
 import time
 import logging
-import random
 from enum import Enum
 from typing import Optional, Callable, Awaitable
 from pyvdcapi.network.genericVDC_pb2 import (
@@ -152,11 +151,9 @@ class VdSMSession:
         self.client_address: Optional[tuple] = None
         
         # Keepalive management
-        self._ping_task: Optional[asyncio.Task] = None
-        self._pong_received = asyncio.Event()
         self._hello_timer: Optional[asyncio.Task] = None
         # Track last ping id for correlation with incoming Pong
-        self._last_ping_id: Optional[int] = None
+        
     
     async def on_connected(self, writer: asyncio.StreamWriter) -> None:
         """
@@ -269,9 +266,7 @@ class VdSMSession:
         self.state = SessionState.ACTIVE
         self.last_activity = time.time()
         
-        # Start keepalive ping mechanism
-        self._ping_task = asyncio.create_task(self._keepalive_loop())
-        
+        # Keepalive is driven by vdSM (vdSM sends Ping); we do not send Ping
         logger.info("vdSM session now ACTIVE")
     
     async def on_ping_received(self, ping_message: Message) -> Message:
@@ -312,12 +307,8 @@ class VdSMSession:
         to our outstanding Ping if the message_id matches the last ping id.
         """
         self.last_activity = time.time()
-        # If this Pong matches the last ping we sent, signal receipt
-        if self._last_ping_id is not None and pong_message.message_id == self._last_ping_id:
-            self._pong_received.set()
-            logger.debug("Received Pong matching last ping id %s", self._last_ping_id)
-        else:
-            logger.debug("Received Pong with id %s (no matching outstanding ping)", pong_message.message_id)
+        # We don't send pings; just update activity timestamp and log
+        logger.debug("Received Pong from vdSM with id %s", pong_message.message_id)
     
     async def on_bye_received(self, bye_message: Message) -> None:
         """
@@ -355,13 +346,7 @@ class VdSMSession:
         )
         
         # Cancel background tasks
-        if self._ping_task:
-            self._ping_task.cancel()
-            try:
-                await self._ping_task
-            except asyncio.CancelledError:
-                pass
-            self._ping_task = None
+        # No ping task to cancel (keepalive is vdSM-driven)
         
         if self._hello_timer:
             self._hello_timer.cancel()
