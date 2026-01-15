@@ -374,7 +374,7 @@ class VdcHost:
         """
         if self._session and getattr(self._session, '_last_received_message_id', None):
             try:
-                return self._session.get_next_message_id()
+                return self._session.allocate_next_message_id()
             except Exception:
                 return None
         return None
@@ -563,8 +563,8 @@ class VdcHost:
                     # on_connected may warn if state unexpected, but proceed
                     logger.debug("Session on_connected raised during Hello handling")
 
-            # Record incoming envelope message_id (when present) so we can
-            # generate next outgoing ids based on the last received one.
+            # Record incoming envelope message_id (when present) in the session
+            # so the session can initialize/advance the next-outgoing id.
             try:
                 has_id = message.HasField('message_id')
             except Exception:
@@ -572,16 +572,14 @@ class VdcHost:
 
             if has_id and int(message.message_id) != 0:
                 if not self._session:
-                    # Create session object if somehow missing
                     self._session = VdSMSession(
                         vdc_host_dsuid=self.dsuid,
                         on_disconnected_callback=self._on_session_disconnected
                     )
                 try:
-                    self._session._last_received_message_id = int(message.message_id)
+                    self._session.record_incoming_message_id(int(message.message_id))
                 except Exception:
-                    # best-effort, ignore if unable to set
-                    logger.debug("Unable to record last_received_message_id")
+                    logger.debug("Unable to record incoming message id in session")
 
             # Route message to appropriate handler
             response = await self._message_router.route(message)
@@ -1045,7 +1043,7 @@ class VdcHost:
     # Additional Message Handlers (Scene, Output, Device Management)
     # ===================================================================
     
-    async def _handle_call_scene(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_call_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_CALL_SCENE message.
         
@@ -1103,7 +1101,7 @@ class VdcHost:
         # Notifications don't send responses
         return None
     
-    async def _handle_save_scene(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_save_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SAVE_SCENE message.
         
@@ -1158,7 +1156,7 @@ class VdcHost:
         
         return None
     
-    async def _handle_undo_scene(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_undo_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_UNDO_SCENE message.
         
@@ -1212,7 +1210,7 @@ class VdcHost:
     async def _handle_set_output_channel_value(
         self, 
         message: Message, 
-        session: 'VdsmSession'
+        session: 'VdSMSession'
     ) -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE message.
@@ -1289,7 +1287,7 @@ class VdcHost:
         
         return None
     
-    async def _handle_dim_channel(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_dim_channel(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_DIM_CHANNEL message.
         
@@ -1366,7 +1364,7 @@ class VdcHost:
         
         return None
     
-    async def _handle_identify(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_identify(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_IDENTIFY message.
         
@@ -1417,7 +1415,7 @@ class VdcHost:
         
         return None
     
-    async def _handle_remove(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_remove(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_SEND_REMOVE message.
         
@@ -1491,7 +1489,7 @@ class VdcHost:
             response.vdc_send_remove_result.description = str(e)
             return response
     
-    async def _handle_generic_request(self, message: Message, session: 'VdsmSession') -> Message:
+    async def _handle_generic_request(self, message: Message, session: 'VdSMSession') -> Message:
         """
         Handle VDSM_REQUEST_GENERIC_REQUEST message.
         
@@ -1595,7 +1593,7 @@ class VdcHost:
             response.vdc_response_generic_response.description = str(e)
             return response
     
-    async def _handle_set_local_prio(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_set_local_prio(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SET_LOCAL_PRIO message.
         
@@ -1637,7 +1635,7 @@ class VdcHost:
         
         return None
     
-    async def _handle_call_min_scene(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_call_min_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_CALL_MIN_SCENE message.
         
@@ -1684,7 +1682,7 @@ class VdcHost:
         
         return None
     
-    async def _handle_set_control_value(self, message: Message, session: 'VdsmSession') -> Optional[Message]:
+    async def _handle_set_control_value(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SET_CONTROL_VALUE message.
         
