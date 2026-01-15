@@ -24,4 +24,18 @@ vdcs:
       metering: false
       identification: false
       dynamicDefinitions: true
-vdsds: {}
+vdsds:
+  000000027F9202F411B8B5822402000000:
+    dSUID: 000000027F9202F411B8B5822402000000
+    type: vdSD
+    model: KarlKiel
+    modelUID: karlkiel
+    vendorName: KarlKiel
+    name: werer
+    active: true
+    displayId: ''
+    modelVersion: '1.0'
+    primaryGroup: 1
+    modelFeatures: {}
+    zoneID: 60586
+    vdc_dSUID: 000000017F9202F411B8B5822402000000

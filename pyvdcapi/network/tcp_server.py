@@ -191,7 +191,8 @@ class TCPServer:
         """
         # Get client address for logging
         peername = writer.get_extra_info('peername')
-        logger.info(f"New connection from {peername}")
+        sockname = writer.get_extra_info('sockname')
+        logger.info(f"New connection from {peername} -> local socket {sockname}")
         
         # Enforce single connection policy
         # If there's already a connection, reject this one
@@ -260,6 +261,10 @@ class TCPServer:
                 # Step 2: Decode length as big-endian uint16
                 message_length = struct.unpack(MESSAGE_LENGTH_FORMAT, length_bytes)[0]
                 logger.debug("%s Read length %d from %s", datetime.now().isoformat(), message_length, peername)
+                try:
+                    logger.debug("Raw length bytes from %s: %s", peername, length_bytes.hex())
+                except Exception:
+                    pass
                 
                 # Sanity check: ensure length is reasonable
                 if message_length == 0:
@@ -276,13 +281,20 @@ class TCPServer:
                 
                 # Step 3: Read the protobuf message payload
                 message_bytes = await reader.readexactly(message_length)
+                try:
+                    logger.debug("Raw message bytes from %s (first 128 bytes): %s", peername, message_bytes[:128].hex())
+                except Exception:
+                    pass
                 
                 # Step 4: Decode protobuf
                 message = Message()
                 try:
                     message.ParseFromString(message_bytes)
                 except Exception as e:
-                    logger.error(f"Failed to parse protobuf message: {e}")
+                    try:
+                        logger.error("Failed to parse protobuf message from %s: %s; raw bytes: %s", peername, e, message_bytes.hex())
+                    except Exception:
+                        logger.error(f"Failed to parse protobuf message: {e}")
                     # Continue trying to read more messages
                     continue
 

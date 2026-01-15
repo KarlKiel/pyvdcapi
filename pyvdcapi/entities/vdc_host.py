@@ -502,6 +502,8 @@ class VdcHost:
             
             # Generic requests
             VDSM_REQUEST_GENERIC_REQUEST: self._handle_generic_request,
+            # Generic responses from vdSM (errors, results)
+            GENERIC_RESPONSE: self._handle_generic_response,
             
             # Device management
             VDSM_SEND_REMOVE: self._handle_remove,
@@ -522,7 +524,20 @@ class VdcHost:
             VDSM_NOTIFICATION_SET_CONTROL_VALUE: self._handle_set_control_value,
         }
         
-        self._message_router.register_handlers(handlers)
+        # Wrap handlers to provide session when handler expects it.
+        wrapped = {}
+        for t, h in handlers.items():
+            async def _make_call(msg, _h=h):
+                try:
+                    # Try calling with session first (many handlers accept session)
+                    return await _h(msg, self._session)
+                except TypeError:
+                    # Fallback to calling without session
+                    return await _h(msg)
+
+            wrapped[t] = _make_call
+
+        self._message_router.register_handlers(wrapped)
         
         logger.debug(f"Registered {len(handlers)} message handlers")
     
@@ -733,7 +748,17 @@ class VdcHost:
         get_prop = message.vdsm_request_get_property
         
         # Extract target dSUID and query
-        target_dsuid = get_prop.dSUID if get_prop.HasField('dSUID') else self.dsuid
+        raw_target = get_prop.dSUID if get_prop.HasField('dSUID') else self.dsuid
+
+        # Normalize dSUID: handle repeated scalar container or single string
+        try:
+            if hasattr(raw_target, '__iter__') and not isinstance(raw_target, (str, bytes)):
+                target_dsuid = str(raw_target[0])
+            else:
+                target_dsuid = str(raw_target)
+        except Exception:
+            target_dsuid = str(raw_target)
+        target_dsuid = target_dsuid.upper().replace('-', '').replace(':', '')
         query = get_prop.query  # PropertyElement tree specifying what to get
         
         logger.debug(f"Property get request for dSUID {target_dsuid}")
@@ -862,6 +887,37 @@ class VdcHost:
 
         # Convert to PropertyElement tree
         return PropertyTree.to_protobuf(filtered)
+
+    async def _handle_generic_response(self, message: Message) -> Optional[Message]:
+        """
+        Handle GENERIC_RESPONSE messages from vdSM.
+
+        These are used to report errors or results for previously sent messages
+        (for example a generic error like ERR_MISSING_DATA). We log the result
+        and may take corrective action in future. Currently we only log.
+        """
+        try:
+            generic = message.generic_response
+            code = generic.code if generic.HasField('code') else None
+            desc = generic.description if generic.HasField('description') else ''
+        except Exception:
+            # In case of malformed message
+            logger.warning(f"Received malformed GENERIC_RESPONSE message_id={getattr(message, 'message_id', None)}")
+            return None
+
+        # Map numeric codes to names when possible
+        try:
+            code_name = genericVDC_pb2.ResultCode.Name(code)
+        except Exception:
+            code_name = str(code)
+
+        if code is not None and code != genericVDC_pb2.ERR_OK:
+            logger.warning(f"GENERIC_RESPONSE from vdSM message_id={message.message_id} code={code_name} description='{desc}'")
+        else:
+            logger.info(f"GENERIC_RESPONSE OK message_id={message.message_id} description='{desc}'")
+
+        # No response needed
+        return None
     
     def _set_host_properties(self, properties) -> None:
         """
@@ -874,7 +930,14 @@ class VdcHost:
         prop_dict = PropertyTree.from_protobuf(properties)
         
         # Update common properties
-        self._common_props.update(prop_dict)
+        try:
+            self._common_props.update_from_dict(prop_dict)
+        except Exception:
+            for k, v in prop_dict.items():
+                try:
+                    self._common_props.set_property(k, v)
+                except Exception:
+                    pass
         
         # Persist changes
         host_config = self._common_props.to_dict()
@@ -1070,8 +1133,30 @@ class VdcHost:
             message.vdsm_notification_call_scene.zone_id - Zone filter (optional)
         """
         try:
-            notification = message.vdsm_notification_call_scene
-            dsuid = notification.dSUID
+            # Accept multiple generated protobuf attribute names for the call-scene notification
+            notification = None
+            for attr in ('vdsm_notification_call_scene', 'vdsm_send_call_scene', 'vdsm_request_call_scene'):
+                if hasattr(message, attr):
+                    notification = getattr(message, attr)
+                    break
+            if notification is None:
+                # Fallback to getattr default
+                notification = getattr(message, 'vdsm_send_call_scene', None)
+            if notification is None:
+                raise AttributeError('vdsm_notification_call_scene')
+
+            raw_dsuid = notification.dSUID
+            # Normalize dSUID: handle repeated scalar container or single string
+            try:
+                if hasattr(raw_dsuid, '__iter__') and not isinstance(raw_dsuid, (str, bytes)):
+                    dsuid = str(raw_dsuid[0])
+                else:
+                    dsuid = str(raw_dsuid)
+            except Exception:
+                dsuid = str(raw_dsuid)
+            # Normalize formatting to uppercase hex without separators
+            dsuid = dsuid.upper().replace('-', '').replace(':', '')
+
             scene = notification.scene
             force = notification.force if notification.HasField('force') else False
             
@@ -1134,12 +1219,32 @@ class VdcHost:
             
             logger.info(f"Save scene {scene} for device {dsuid}")
             
-            # Find device
+            # Find device (tolerant matching): try direct lookup, then compare normalized keys
             device = None
             for vdc in self._vdcs.values():
+                # direct fast path
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
+
+            if device is None:
+                # Normalize for comparison: remove separators and uppercase
+                try:
+                    norm = dsuid.replace('-', '').replace(':', '').upper()
+                except Exception:
+                    norm = str(dsuid).replace('-', '').replace(':', '').upper()
+
+                for vdc in self._vdcs.values():
+                    for key, dev in vdc._vdsds.items():
+                        try:
+                            key_norm = key.replace('-', '').replace(':', '').upper()
+                        except Exception:
+                            key_norm = str(key).replace('-', '').replace(':', '').upper()
+                        if key_norm == norm:
+                            device = dev
+                            break
+                    if device:
+                        break
             
             if device is None:
                 logger.warning(f"Device {dsuid} not found for SaveScene")
@@ -1521,7 +1626,11 @@ class VdcHost:
         try:
             request = message.vdsm_request_generic_request
             dsuid = request.dSUID if request.HasField('dSUID') else None
-            method_name = request.method_name
+            # protobuf may name the field 'methodname' (no underscore)
+            if hasattr(request, 'methodname'):
+                method_name = request.methodname
+            else:
+                method_name = getattr(request, 'method_name', '')
             params = PropertyTree.from_protobuf(request.params) if request.HasField('params') else {}
             
             logger.info(f"Generic request: {method_name} on {dsuid or 'host'} with params {params}")
@@ -1540,9 +1649,9 @@ class VdcHost:
                     # Device not found
                     response = Message()
                     response.message_id = message.message_id
-                    response.vdc_response_generic_response.SetInParent()
-                    response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_FOUND
-                    response.vdc_response_generic_response.description = f"Device {dsuid} not found"
+                    response.generic_response.SetInParent()
+                    response.generic_response.code = genericVDC_pb2.ERR_NOT_FOUND
+                    response.generic_response.description = f"Device {dsuid} not found"
                     return response
                 
                 # Try to call action on device
@@ -1553,9 +1662,9 @@ class VdcHost:
                     # Action not found
                     response = Message()
                     response.message_id = message.message_id
-                    response.vdc_response_generic_response.SetInParent()
-                    response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_IMPLEMENTED
-                    response.vdc_response_generic_response.description = f"Action '{method_name}' not found on device"
+                    response.generic_response.SetInParent()
+                    response.generic_response.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
+                    response.generic_response.description = f"Action '{method_name}' not found on device"
                     return response
             
             else:
@@ -1563,22 +1672,24 @@ class VdcHost:
                 # Could implement host-level actions here
                 response = Message()
                 response.message_id = message.message_id
-                response.vdc_response_generic_response.SetInParent()
-                response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_NOT_IMPLEMENTED
-                response.vdc_response_generic_response.description = "Host-level actions not implemented"
+                response.generic_response.SetInParent()
+                response.generic_response.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
+                response.generic_response.description = "Host-level actions not implemented"
                 return response
             
             # Send successful response with result
             response = Message()
             response.message_id = message.message_id
-            response.vdc_response_generic_response.SetInParent()
-            response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_OK
+            response.generic_response.SetInParent()
+            response.generic_response.code = genericVDC_pb2.ERR_OK
             
             # Convert result to PropertyElement if present
             if result is not None:
-                response.vdc_response_generic_response.result.CopyFrom(
-                    PropertyTree.to_protobuf({'result': result})
-                )
+                # GenericResponse has no 'result' field in this proto; include result in generic_response.description
+                try:
+                    response.generic_response.description = str(result)
+                except Exception:
+                    pass
             
             return response
             
@@ -1588,9 +1699,9 @@ class VdcHost:
             # Send error response
             response = Message()
             response.message_id = message.message_id
-            response.vdc_response_generic_response.SetInParent()
-            response.vdc_response_generic_response.code = genericVDC_pb2.ERROR_INTERNAL
-            response.vdc_response_generic_response.description = str(e)
+            response.generic_response.SetInParent()
+            response.generic_response.code = genericVDC_pb2.ERR_INTERNAL if hasattr(genericVDC_pb2, 'ERR_INTERNAL') else genericVDC_pb2.ERR_NOT_IMPLEMENTED
+            response.generic_response.description = str(e)
             return response
     
     async def _handle_set_local_prio(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
@@ -1703,8 +1814,27 @@ class VdcHost:
             message.vdsm_notification_set_control_value.value - Control value
         """
         try:
-            notification = message.vdsm_notification_set_control_value
-            dsuid = notification.dSUID
+            # protobuf generated name may be 'vdsm_notification_set_control_value' or 'vdsm_send_set_control_value'
+            if hasattr(message, 'vdsm_notification_set_control_value'):
+                notification = message.vdsm_notification_set_control_value
+            elif hasattr(message, 'vdsm_send_set_control_value'):
+                notification = message.vdsm_send_set_control_value
+            else:
+                # Try alternate naming used in older generated protos
+                notification = getattr(message, 'vdsm_send_set_control_value', None)
+                if notification is None:
+                    raise AttributeError('vdsm_notification_set_control_value')
+            # Normalize dSUID: handle repeated scalar container or single string
+            raw_dsuid = notification.dSUID
+            try:
+                if hasattr(raw_dsuid, '__iter__') and not isinstance(raw_dsuid, (str, bytes)):
+                    dsuid = str(raw_dsuid[0])
+                else:
+                    dsuid = str(raw_dsuid)
+            except Exception:
+                dsuid = str(raw_dsuid)
+            dsuid = dsuid.upper().replace('-', '').replace(':', '')
+
             control_name = notification.name
             value = notification.value
             
@@ -1718,7 +1848,30 @@ class VdcHost:
                     break
             
             if device is None:
-                logger.warning(f"Device {dsuid} not found for SetControlValue")
+                # Device not currently loaded in memory. Persist the control
+                # value into YAML persistence so the vdSD's property tree
+                # contains the requested control value for later retrieval.
+                try:
+                    # Store under 'controlValues.<control_name>' path
+                    prop_path = f"controlValues.{control_name}"
+                    # Try updating existing persisted vdSD
+                    existing = self._persistence.get_vdsd(dsuid)
+                    if existing is None:
+                        # Create minimal vdSD entry with control value
+                        config = {
+                            'dSUID': dsuid,
+                            'controlValues': {control_name: float(value)}
+                        }
+                        self._persistence.set_vdsd(dsuid, config)
+                        logger.info(f"Persisted new vdSD {dsuid} with control {control_name}={value}")
+                    else:
+                        # Update specific property path
+                        self._persistence.update_vdsd_property(dsuid, prop_path, float(value))
+                        logger.info(f"Updated persisted vdSD {dsuid}: {prop_path}={value}")
+                except Exception as e:
+                    logger.error(f"Failed to persist control value for {dsuid}: {e}", exc_info=True)
+
+                logger.info(f"Device [{dsuid}] not loaded; persisted control {control_name}={value}")
                 return None
             
             # Set control value
