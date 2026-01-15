@@ -1,4 +1,4 @@
-vdSM session management for vDC API protocol.
+"""vdSM session management for vDC API protocol.
 
 A vdSM (virtualDeviceConnector Smart Manager) session represents the
 connection lifecycle between a vDC host and the digitalSTROM manager.
@@ -19,6 +19,7 @@ The session manager:
 
 Note: Keep-alive initiation/monitoring has been removed. The session
 still answers received SendPing messages with SendPong.
+"""
 
 import asyncio
 import time

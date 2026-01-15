@@ -62,7 +62,8 @@ class ServiceAnnouncer:
         self.host_name = host_name or socket.gethostname()
         self.use_avahi = use_avahi
 
-        self._service_type = "_ds-vdc._tcp"
+        # Zeroconf requires service type/name to end with '.local.'
+        self._service_type = "_ds-vdc._tcp.local."
         self._service_name = f"digitalSTROM vDC host on {self.host_name}"
 
         # For zeroconf implementation
@@ -154,6 +155,75 @@ class ServiceAnnouncer:
             from zeroconf import ServiceInfo
             from zeroconf.asyncio import AsyncZeroconf
         except ImportError:
-            logger.error(
-                "zeroconf library not installed. Install with: pip install zeroconf"
+            logger.error("zeroconf library not installed. Install with: pip install zeroconf")
+            return False
+
+        # Minimal async zeroconf start: create objects lazily and mark running.
+        try:
+            # Create AsyncZeroconf and ServiceInfo only if available; keep simple here
+            self._zeroconf = AsyncZeroconf()
+
+            # Determine a sensible non-loopback IPv4 address for the host
+            addrs = []
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                # connect to a public IP (no traffic sent) to determine local IP
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+                import socket as _sock
+                addrs = [_sock.inet_aton(local_ip)]
+            except Exception:
+                addrs = []
+
+            # TXT records include dSUID for discovery. Provide the server FQDN
+            # and explicit addresses so Avahi/other resolvers can resolve the host.
+            info = ServiceInfo(
+                type_=self._service_type,
+                name=f"{self._service_name}.{self._service_type}",
+                addresses=addrs,
+                port=self.port,
+                properties={"dSUID": self.dsuid},
+                server=f"{self.host_name}.local.",
+            )
+            self._service_info = info
+            # Register service asynchronously (best-effort).
+            # AsyncZeroconf exposes `async_register_service` in recent versions;
+            # fall back to calling `register_service` in an executor if needed.
+            async_reg = getattr(self._zeroconf, "async_register_service", None)
+            if callable(async_reg):
+                await async_reg(info)
+            else:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self._zeroconf.register_service, info)
+
+            # Log detailed service info for visibility
+            try:
+                addrs = []
+                if info.addresses:
+                    import socket as _sock
+                    for a in info.addresses:
+                        try:
+                            addrs.append(_sock.inet_ntoa(a))
+                        except Exception:
+                            addrs.append(str(a))
+                props = {}
+                for k, v in info.properties.items():
+                    key = k.decode() if isinstance(k, bytes) else k
+                    val = v.decode() if isinstance(v, bytes) else v
+                    props[key] = val
+            except Exception:
+                addrs = getattr(info, 'addresses', None)
+                props = getattr(info, 'properties', None)
+
+            logger.info(
+                "Announced service details: name=%s, type=%s, port=%s, addresses=%s, properties=%s",
+                getattr(info, 'name', None), self._service_type, getattr(info, 'port', None), addrs, props,
+            )
+
+            self._running = True
+            return True
+        except Exception as e:
+            logger.error("Failed to start zeroconf announcement: %s", e)
+            return False
 
