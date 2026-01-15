@@ -40,6 +40,9 @@ vdsds:
     zoneID: 60586
     vdc_dSUID: 000000017F9202F411B8B5822402000000
     controlValues:
-      BrightnessZone: 25.926864621692438
-      TemperatureZone: 22.00000000000003
-      CarbonDioxide: 726.5240579509924
+      BrightnessZone: 15.986375139674847
+      TemperatureZone: 22.100000000000023
+      CarbonDioxide: 630.957344480193
+      TemperatureSetPoint: 19.00000000000003
+      TemperatureOutside: -0.27499999999997726
+      HumidityZone: 19.0

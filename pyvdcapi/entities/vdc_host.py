@@ -647,7 +647,40 @@ class VdcHost:
         await self._session.on_hello_sent()
         
         logger.info("Sent Hello response to vdSM - session now ACTIVE")
-        
+        # After handshake, announce configured vDCs and their devices
+        try:
+            writer = getattr(self._session, 'writer', None)
+            if writer:
+                async def _announce_all():
+                    try:
+                        for vdc in list(self._vdcs.values()):
+                            try:
+                                msg = vdc.announce_to_vdsm()
+                                await TCPServer.send_message(writer, msg)
+                            except Exception as e:
+                                logger.warning(f"Failed to send announce vDC {vdc.dsuid}: {e}")
+
+                            # Announce devices for this vDC
+                            try:
+                                for dev_msg in vdc.announce_devices():
+                                    try:
+                                        await TCPServer.send_message(writer, dev_msg)
+                                    except Exception as e:
+                                        logger.warning(f"Failed to send announce device: {e}")
+                            except Exception as e:
+                                logger.warning(f"Failed to create device announcements for vDC {vdc.dsuid}: {e}")
+                    except Exception as e:
+                        logger.error(f"Error while announcing vDCs/devices after Hello: {e}", exc_info=True)
+
+                # Schedule announce task (do not block Hello response)
+                try:
+                    asyncio.get_event_loop().create_task(_announce_all())
+                except Exception:
+                    # Fallback: create_task may fail if no running loop
+                    asyncio.create_task(_announce_all())
+        except Exception:
+            logger.exception("Unexpected error scheduling vDC/device announces after Hello")
+
         return response
     
     async def _handle_bye(self, message: Message) -> Optional[Message]:
