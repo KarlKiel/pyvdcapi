@@ -62,8 +62,7 @@ class ServiceAnnouncer:
         self.host_name = host_name or socket.gethostname()
         self.use_avahi = use_avahi
 
-        # Zeroconf requires service type/name to end with '.local.'
-        self._service_type = "_ds-vdc._tcp.local."
+        self._service_type = "_ds-vdc._tcp"
         self._service_name = f"digitalSTROM vDC host on {self.host_name}"
 
         # For zeroconf implementation
@@ -121,7 +120,7 @@ class ServiceAnnouncer:
         Synchronous wrapper for start(). Useful when not running inside an event loop.
 
         If an event loop is already running, raises RuntimeError and the user should use
-        the async API instead (await start()) or use the async context manager.
+        the async API instead (await start()) or use "async with".
         """
         try:
             loop = asyncio.get_running_loop()
@@ -155,75 +154,232 @@ class ServiceAnnouncer:
             from zeroconf import ServiceInfo
             from zeroconf.asyncio import AsyncZeroconf
         except ImportError:
-            logger.error("zeroconf library not installed. Install with: pip install zeroconf")
+            logger.error(
+                "zeroconf library not installed. Install with: pip install zeroconf"
+            )
             return False
 
-        # Minimal async zeroconf start: create objects lazily and mark running.
         try:
-            # Create AsyncZeroconf and ServiceInfo only if available; keep simple here
+            addresses = self._get_local_addresses()
+            if not addresses:
+                logger.error("No network addresses found for service announcement")
+                return False
+
+            # Type must include .local. suffix for mDNS
+            service_type = f"{self._service_type}.local."
+
+            # Create fully-qualified service name: "<instance>.<service_type>"
+            service_name = f"{self._service_name}.{service_type}"
+
+            # Server name must be a valid DNS name ending with .local. Use lowercase for Avahi compatibility.
+            server_name = f"{self.host_name.lower()}.local."
+
+            logger.info("Creating mDNS service: type=%s, name=%s, server=%s, port=%d",
+                        service_type, service_name, server_name, self.port)
+            logger.debug("Addresses: %s", [".".join(str(b) for b in addr) for addr in addresses])
+
+            # Prepare TXT records.
+            # Ensure the TXT record contains the requested keys:
+            # - "service protocol": "ipv4"
+            # - "dSUID": <dsuid>
+            # Keep lowercase 'dsuid' too for compatibility with some resolvers.
+            txt_records = {
+                "service protocol": "ipv4",
+                "dSUID": self.dsuid,
+                "dsuid": self.dsuid,
+            }
+            logger.info("Prepared TXT records for service announcement: %s", txt_records)
+
+            self._service_info = ServiceInfo(
+                type_=service_type,
+                name=service_name,
+                port=self.port,
+                addresses=addresses,
+                properties=txt_records,
+                server=server_name,
+            )
+
+            logger.debug("Creating AsyncZeroconf instance")
             self._zeroconf = AsyncZeroconf()
 
-            # Determine a sensible non-loopback IPv4 address for the host
-            addrs = []
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                # connect to a public IP (no traffic sent) to determine local IP
-                s.connect(("8.8.8.8", 80))
-                local_ip = s.getsockname()[0]
-                s.close()
-                import socket as _sock
-                addrs = [_sock.inet_aton(local_ip)]
-            except Exception:
-                addrs = []
-
-            # TXT records include dSUID for discovery. Provide the server FQDN
-            # and explicit addresses so Avahi/other resolvers can resolve the host.
-            info = ServiceInfo(
-                type_=self._service_type,
-                name=f"{self._service_name}.{self._service_type}",
-                addresses=addrs,
-                port=self.port,
-                properties={"dSUID": self.dsuid},
-                server=f"{self.host_name}.local.",
-            )
-            self._service_info = info
-            # Register service asynchronously (best-effort).
-            # AsyncZeroconf exposes `async_register_service` in recent versions;
-            # fall back to calling `register_service` in an executor if needed.
-            async_reg = getattr(self._zeroconf, "async_register_service", None)
-            if callable(async_reg):
-                await async_reg(info)
-            else:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, self._zeroconf.register_service, info)
-
-            # Log detailed service info for visibility
-            try:
-                addrs = []
-                if info.addresses:
-                    import socket as _sock
-                    for a in info.addresses:
-                        try:
-                            addrs.append(_sock.inet_ntoa(a))
-                        except Exception:
-                            addrs.append(str(a))
-                props = {}
-                for k, v in info.properties.items():
-                    key = k.decode() if isinstance(k, bytes) else k
-                    val = v.decode() if isinstance(v, bytes) else v
-                    props[key] = val
-            except Exception:
-                addrs = getattr(info, 'addresses', None)
-                props = getattr(info, 'properties', None)
-
-            logger.info(
-                "Announced service details: name=%s, type=%s, port=%s, addresses=%s, properties=%s",
-                getattr(info, 'name', None), self._service_type, getattr(info, 'port', None), addrs, props,
-            )
+            logger.debug("Registering service with AsyncZeroconf: %s", self._service_info)
+            await self._zeroconf.async_register_service(self._service_info)
+            logger.info("Started mDNS service announcement: %s on port %d", self._service_name, self.port)
 
             self._running = True
             return True
+
         except Exception as e:
-            logger.error("Failed to start zeroconf announcement: %s", e)
+            logger.error("Failed to start zeroconf announcement: %s: %s", type(e).__name__, e, exc_info=True)
+            if self._zeroconf:
+                try:
+                    await self._zeroconf.async_close()
+                except Exception:
+                    pass
+                self._zeroconf = None
             return False
 
+    async def _stop_zeroconf_async(self) -> None:
+        """Stop zeroconf announcement (async version)."""
+        if self._zeroconf and self._service_info:
+            try:
+                await self._zeroconf.async_unregister_service(self._service_info)
+                await self._zeroconf.async_close()
+                logger.info("Unregistered mDNS service")
+            except Exception as e:
+                logger.error("Error unregistering service: %s", e)
+            finally:
+                self._zeroconf = None
+                self._service_info = None
+
+    # -----------------------
+    # Avahi methods
+    # -----------------------
+    def _start_avahi(self) -> bool:
+        """Start announcement using Avahi daemon."""
+        import os
+
+        # Check if Avahi daemon is available
+        if not os.path.exists("/etc/avahi/services"):
+            logger.error(
+                "Avahi daemon not found. /etc/avahi/services does not exist. "
+                "Install avahi-daemon or use zeroconf mode instead."
+            )
+            return False
+
+        # Create Avahi service file with TXT records
+        # Avahi accepts <txt-record>key=value</txt-record> entries inside <service>
+        # We'll include both capitalized and lowercase dSUID keys for compatibility.
+        txt_entries = (
+            f"  <txt-record>service protocol=ipv4</txt-record>\n"
+            f"  <txt-record>dSUID={self.dsuid}</txt-record>\n"
+            f"  <txt-record>dsuid={self.dsuid}</txt-record>\n"
+        )
+
+        service_xml = f"""<?xml version="1.0" standalone="no"?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">{self._service_name}</name>
+  <service protocol="ipv4">
+    <type>_ds-vdc._tcp</type>
+    <port>{self.port}</port>
+{txt_entries}  </service>
+</service-group>
+"""
+
+        service_file = f"/etc/avahi/services/ds-vdc-{self.port}.service"
+
+        try:
+            with open(service_file, "w") as f:
+                f.write(service_xml)
+
+            self._avahi_service_file = service_file
+            self._running = True
+
+            logger.info(
+                "Created Avahi service file: %s. Avahi daemon will announce the service automatically.",
+                service_file,
+            )
+            return True
+
+        except PermissionError:
+            logger.error(
+                "Permission denied writing to %s. Avahi service announcement requires root privileges. Consider using zeroconf mode instead (use_avahi=False).",
+                service_file,
+            )
+            return False
+        except Exception as e:
+            logger.error("Failed to create Avahi service file: %s", e)
+            return False
+
+    def _stop_avahi(self) -> None:
+        """Stop Avahi announcement by removing service file."""
+        import os
+
+        if self._avahi_service_file and os.path.exists(self._avahi_service_file):
+            try:
+                os.remove(self._avahi_service_file)
+                logger.info("Removed Avahi service file: %s", self._avahi_service_file)
+            except Exception as e:
+                logger.error("Error removing Avahi service file: %s", e)
+            finally:
+                self._avahi_service_file = None
+
+    # -----------------------
+    # Utilities
+    # -----------------------
+    def _get_local_addresses(self) -> List[bytes]:
+        """
+        Get local network addresses for service announcement.
+
+        Returns:
+            List of IP addresses as bytes (packed)
+        """
+        addresses: List[bytes] = []
+
+        try:
+            hostname = socket.gethostname()
+            addr_info = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+
+            for info in addr_info:
+                ip_str = info[4][0]
+                # Skip localhost
+                if ip_str.startswith("127."):
+                    continue
+                try:
+                    ip_obj = ipaddress.IPv4Address(ip_str)
+                    addresses.append(ip_obj.packed)
+                except Exception:
+                    continue
+
+        except Exception as e:
+            logger.warning("Error getting network addresses by hostname lookup: %s", e)
+
+        # Fallback: determine the default interface IP used to reach the Internet
+        if not addresses:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                # doesn't need to be reachable; used only to determine outbound IP address
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+
+                if not local_ip.startswith("127."):
+                    ip_obj = ipaddress.IPv4Address(local_ip)
+                    addresses.append(ip_obj.packed)
+            except Exception:
+                logger.debug("Fallback method to discover local address failed", exc_info=True)
+
+        return addresses
+
+    def is_running(self) -> bool:
+        """Check if service announcement is active."""
+        return self._running
+
+    # -----------------------
+    # Context managers
+    # -----------------------
+    def __enter__(self):
+        """
+        Synchronous context manager entry. Calls start_sync().
+
+        If an asyncio event loop is already running, this will raise a RuntimeError.
+        Use "async with" in that case.
+        """
+        self.start_sync()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Synchronous context manager exit. Calls stop_sync()."""
+        self.stop_sync()
+        return False
+
+    async def __aenter__(self):
+        """Async context manager entry: await start()."""
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit: await stop()."""
+        await self.stop()
+        return False

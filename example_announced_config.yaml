@@ -11,7 +11,7 @@ vdcs:
   000000017F9202F411B8B5822402000000:
     dSUID: 000000017F9202F411B8B5822402000000
     type: vDC
-    model: DemoModel
+    model: KarlKiel
     modelUID: karlkiel
     vendorName: KarlKiel
     name: testVdc
