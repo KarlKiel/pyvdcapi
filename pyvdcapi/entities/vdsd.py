@@ -128,6 +128,7 @@ from ..properties.common import CommonProperties
 from ..properties.vdsd_props import VdSDProperties
 from ..properties.property_tree import PropertyTree
 from ..utils.callbacks import Observable
+from ..properties.control_value import ControlValues
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,14 @@ class VdSD:
             primary_group=primary_group,
             **vdsd_config
         )
+
+        # Control values container (in-memory representation)
+        # Load persisted controlValues if present
+        try:
+            persisted_cvs = vdsd_config.get('controlValues', {}) if isinstance(vdsd_config, dict) else {}
+        except Exception:
+            persisted_cvs = {}
+        self.controlValues = ControlValues(persisted_cvs)
         
         # Device components
         # These will hold the actual input/output/scene components
@@ -1650,22 +1659,28 @@ class VdSD:
             device.set_control_value("valve_position", 75.0)
         """
         logger.info(f"Set control '{control_name}' to {value} on device {self.dsuid}")
-        
-        # Store control value
-        if not hasattr(self, '_control_values'):
-            self._control_values = {}
-        
-        self._control_values[control_name] = value
-        
-        # Trigger hardware callback if registered
-        if self._hardware_callbacks.get('on_control_change'):
-            self._hardware_callbacks['on_control_change'](control_name, value)
-        
-        # Persist control value so it is available via persistence for vdSM queries
+
+        # Update or create ControlValue instance in container
         try:
-            # Store under 'controlValues.<control_name>'
+            cv = self.controlValues.set(control_name, value)
+        except Exception:
+            # Fallback: ensure a dict container exists
+            if not hasattr(self, '_control_values'):
+                self._control_values = {}
+            self._control_values[control_name] = value
+
+        # Trigger hardware callback if registered
+        try:
+            if getattr(self, '_hardware_callbacks', None) and self._hardware_callbacks.get('on_control_change'):
+                self._hardware_callbacks['on_control_change'](control_name, value)
+        except Exception:
+            pass
+
+        # Persist control values mapping so it is available via persistence for vdSM queries
+        try:
             if hasattr(self, '_persistence') and self._persistence:
-                self._persistence.update_vdsd_property(self.dsuid, f"controlValues.{control_name}", float(value))
+                # Persist full controlValues dict under 'controlValues'
+                self._persistence.update_vdsd_property(self.dsuid, 'controlValues', self.controlValues.to_persistence())
         except Exception as e:
             logger.warning(f"Unable to persist control value for {self.dsuid}: {e}")
 
@@ -1673,13 +1688,12 @@ class VdSD:
         try:
             host = getattr(self.vdc, 'host', None)
             if host and hasattr(host, 'send_push_notification'):
-                # Schedule async push without awaiting
                 try:
                     asyncio.get_event_loop().create_task(
                         host.send_push_notification(self.dsuid, {'controlValues': {control_name: float(value)}})
                     )
                 except RuntimeError:
-                    # No running loop; ignore push
+                    # No running event loop; ignore push
                     pass
         except Exception:
             pass

@@ -76,6 +76,27 @@ class YAMLPersistence:
                         if not isinstance(loaded_data, dict):
                             raise ValueError("Invalid YAML structure: root must be a dictionary")
                         self._data = loaded_data
+                        # Normalize any vdsd keys that may be stored in
+                        # non-canonical formats (e.g., stringified lists).
+                        try:
+                            if isinstance(self._data, dict) and 'vdsds' in self._data:
+                                normalized = {}
+                                for key, val in self._data.get('vdsds', {}).items():
+                                    norm_key = self._normalize_dsuid(key)
+                                    # Ensure val is a dict copy
+                                    val_copy = val.copy() if isinstance(val, dict) else {'dSUID': str(val)}
+                                    # Merge if multiple entries map to same canonical key
+                                    if norm_key in normalized:
+                                        existing = normalized[norm_key]
+                                        existing.update(val_copy)
+                                        existing['dSUID'] = norm_key
+                                    else:
+                                        val_copy['dSUID'] = norm_key
+                                        normalized[norm_key] = val_copy
+                                self._data['vdsds'] = normalized
+                        except Exception:
+                            # If normalization fails, continue with loaded data
+                            pass
                 logger.info(f"Loaded persistence from {self.file_path}")
             except Exception as e:
                 # Try to restore from backup
@@ -158,6 +179,38 @@ class YAMLPersistence:
         except Exception as e:
             logger.error(f"Error saving YAML: {e}", exc_info=True)
             raise
+
+    def _normalize_dsuid(self, dsuid: Any) -> str:
+        """
+        Normalize various dSUID representations into canonical string form.
+
+        Handles:
+        - bytes/str: return uppercased without separators
+        - lists/tuples: take first element
+        - stringified lists like "['abc']" -> extracts inner value
+        """
+        try:
+            # If it's a sequence (list/tuple), take first element
+            if isinstance(dsuid, (list, tuple)):
+                dsuid_val = dsuid[0]
+            else:
+                dsuid_val = dsuid
+
+            # Coerce to string
+            dsuid_str = str(dsuid_val)
+
+            # If string looks like a bracketed list: "['...']" or '["..."]'
+            if dsuid_str.startswith('[') and dsuid_str.endswith(']'):
+                inner = dsuid_str[1:-1].strip()
+                if (inner.startswith("'") and inner.endswith("'")) or (inner.startswith('"') and inner.endswith('"')):
+                    inner = inner[1:-1]
+                dsuid_str = inner
+
+            # Normalize formatting
+            dsuid_str = dsuid_str.upper().replace('-', '').replace(':', '')
+            return dsuid_str
+        except Exception:
+            return str(dsuid)
     
     def get_vdc_host(self) -> Dict[str, Any]:
         """Get vDC host configuration."""
@@ -188,7 +241,11 @@ class YAMLPersistence:
             vDC configuration or None if not found
         """
         with self._lock:
-            return self._data.get('vdcs', {}).get(dsuid, {}).copy()
+            vdcs = self._data.get('vdcs', {})
+            entry = vdcs.get(dsuid)
+            if entry is None:
+                return None
+            return entry.copy()
     
     def set_vdc(self, dsuid: str, config: Dict[str, Any]) -> None:
         """
@@ -244,8 +301,13 @@ class YAMLPersistence:
         Returns:
             vdSD configuration or None if not found
         """
+        dsuid = self._normalize_dsuid(dsuid)
         with self._lock:
-            return self._data.get('vdsds', {}).get(dsuid, {}).copy()
+            vdsds = self._data.get('vdsds', {})
+            entry = vdsds.get(dsuid)
+            if entry is None:
+                return None
+            return entry.copy()
     
     def set_vdsd(self, dsuid: str, config: Dict[str, Any]) -> None:
         """
@@ -255,6 +317,11 @@ class YAMLPersistence:
             dsuid: dSUID of the vdSD
             config: vdSD configuration dictionary
         """
+        dsuid = self._normalize_dsuid(dsuid)
+        # Ensure stored config has canonical dSUID
+        config = dict(config)
+        config['dSUID'] = dsuid
+
         with self._lock:
             if 'vdsds' not in self._data:
                 self._data['vdsds'] = {}
@@ -273,6 +340,7 @@ class YAMLPersistence:
         Returns:
             True if deleted, False if not found
         """
+        dsuid = self._normalize_dsuid(dsuid)
         with self._lock:
             if dsuid in self._data.get('vdsds', {}):
                 del self._data['vdsds'][dsuid]
@@ -317,11 +385,17 @@ class YAMLPersistence:
             property_path: Dot-separated property path (e.g., "outputs.0.value")
             value: New value
         """
+        dsuid = self._normalize_dsuid(dsuid)
+
         with self._lock:
+            if 'vdsds' not in self._data:
+                self._data['vdsds'] = {}
+
             if dsuid not in self._data.get('vdsds', {}):
-                logger.warning(f"vdSD {dsuid} not found in persistence")
-                return
-            
+                logger.warning(f"vdSD {dsuid} not found in persistence; creating new entry")
+                # Create minimal vdSD entry so nested properties can be set
+                self._data['vdsds'][dsuid] = {'dSUID': dsuid}
+
             config = self._data['vdsds'][dsuid]
             parts = property_path.split('.')
             current = config
