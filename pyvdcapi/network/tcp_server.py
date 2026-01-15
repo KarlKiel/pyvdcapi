@@ -347,14 +347,26 @@ class TCPServer:
             Exception: If serialization or sending fails
         """
         try:
-            # Print outgoing message to console before serialization
+            # Prepare a copy of the message for serialization so we can
+            # remove the envelope `message_id` when it is unset/zero.
             try:
-                print("SEND:", message, flush=True)
+                out_msg = Message()
+                out_msg.CopyFrom(message)
+                # In proto2, optional fields may be present; ensure we do
+                # not serialize an explicit zero `message_id`.
+                if out_msg.HasField('message_id') and out_msg.message_id == 0:
+                    out_msg.ClearField('message_id')
+            except Exception:
+                out_msg = message
+
+            # Print outgoing message that will actually be sent
+            try:
+                print("SEND:", out_msg, flush=True)
             except Exception:
                 logger.debug("Failed to print outgoing message")
 
             # Step 1: Serialize protobuf to bytes
-            message_bytes = message.SerializeToString()
+            message_bytes = out_msg.SerializeToString()
             message_length = len(message_bytes)
             
             # Step 2: Validate length fits in uint16

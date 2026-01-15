@@ -19,9 +19,9 @@ vdcs:
     displayId: ''
     modelVersion: '1.0'
     implementationId: x-KarlKiel-generic vDC
-    zoneID: 65534
     capabilities:
       metering: false
       identification: false
       dynamicDefinitions: true
+    zoneID: 65534
 vdsds: {}

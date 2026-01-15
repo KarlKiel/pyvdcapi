@@ -583,9 +583,9 @@ class Vdc:
         """
         message = Message()
         message.type = VDC_SEND_ANNOUNCE_VDC
-        # Set message_id explicitly so vdSM can correlate responses.
-        # Default is 0 for announcement notifications initiated by vDC.
-        message.message_id = int(message_id)
+        # Announcements are notifications and must not include an
+        # envelope `message_id` according to the .proto definition.
+        # Do not set `message.message_id` here.
         
         # Create announcement with vDC properties
         announce = message.vdc_send_announce_vdc
