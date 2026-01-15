@@ -8,6 +8,9 @@ import asyncio
 import struct
 import random
 import logging
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from pyvdcapi.network import genericVDC_pb2 as pb
 
 MESSAGE_LENGTH_FORMAT = '!H'

@@ -1,5 +1,8 @@
 import asyncio
 import struct
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from pyvdcapi.entities.vdc_host import VdcHost
 from pyvdcapi.network import genericVDC_pb2 as pb
 
