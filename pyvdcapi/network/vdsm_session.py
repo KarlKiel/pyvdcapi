@@ -157,6 +157,10 @@ class VdSMSession:
         self._hello_timer: Optional[asyncio.Task] = None
         # Track last ping id for correlation with incoming Pong
         
+        # Track last received envelope message_id (when present and non-zero)
+        # and the next outgoing id to allocate for initiated messages.
+        self._last_received_message_id: Optional[int] = None
+        self._next_outgoing_message_id: Optional[int] = None
     
     async def on_connected(self, writer: asyncio.StreamWriter) -> None:
         """
@@ -316,12 +320,53 @@ class VdSMSession:
         If a previous incoming message had a non-zero `message_id`, return
         that value plus one. Otherwise return 1 as a safe default.
         """
+        # Return the current next outgoing id without consuming it.
+        if self._next_outgoing_message_id and int(self._next_outgoing_message_id) != 0:
+            try:
+                return int(self._next_outgoing_message_id)
+            except Exception:
+                return 1
+
         if self._last_received_message_id and int(self._last_received_message_id) != 0:
             try:
                 return int(self._last_received_message_id) + 1
             except Exception:
                 return 1
         return 1
+
+    def record_incoming_message_id(self, message_id: int) -> None:
+        """
+        Record a non-zero incoming message_id from vdSM.
+
+        This updates the last-received id and initializes/advances
+        the internal next-outgoing id (used for initiated messages).
+        """
+        try:
+            mid = int(message_id)
+        except Exception:
+            return
+
+        if mid == 0:
+            return
+
+        self._last_received_message_id = mid
+        candidate = mid + 1
+        if self._next_outgoing_message_id is None or int(self._next_outgoing_message_id) < candidate:
+            self._next_outgoing_message_id = candidate
+
+    def allocate_next_message_id(self) -> Optional[int]:
+        """
+        Allocate and return the next outgoing message id, incrementing
+        the internal counter. Returns None if no next id was initialized.
+        """
+        if self._next_outgoing_message_id is None:
+            return None
+        val = int(self._next_outgoing_message_id)
+        try:
+            self._next_outgoing_message_id = int(self._next_outgoing_message_id) + 1
+        except Exception:
+            self._next_outgoing_message_id = None
+        return val
     
     def on_pong_received(self, pong_message: Message) -> None:
         """

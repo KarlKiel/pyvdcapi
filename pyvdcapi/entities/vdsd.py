@@ -1155,7 +1155,18 @@ class VdSD:
         """
         message = Message()
         message.type = VDC_SEND_ANNOUNCE_DEVICE
-        
+        # Optionally set message_id when host/session has previously
+        # received a non-zero id (use last_received + 1). Otherwise leave
+        # the envelope id absent on the wire.
+        try:
+            next_id = None
+            if hasattr(self, 'vdc') and getattr(self.vdc, 'host', None):
+                next_id = self.vdc.host._next_message_id_if_have_received()
+            if next_id:
+                message.message_id = int(next_id)
+        except Exception:
+            pass
+
         announce = message.vdc_send_announce_device
         announce.dSUID = self.dsuid
         
