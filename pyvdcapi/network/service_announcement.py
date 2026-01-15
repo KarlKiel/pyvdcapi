@@ -247,25 +247,21 @@ class ServiceAnnouncer:
             )
             return False
 
-        # Create Avahi service file with TXT records
-        # Avahi accepts <txt-record>key=value</txt-record> entries inside <service>
-        # We'll include both capitalized and lowercase dSUID keys for compatibility.
-        txt_entries = (
-            f"  <txt-record>service protocol=ipv4</txt-record>\n"
-            f"  <txt-record>dSUID={self.dsuid}</txt-record>\n"
-            f"  <txt-record>dsuid={self.dsuid}</txt-record>\n"
+        # Create Avahi service file with a single TXT record for dSUID.
+        # Follow the exact XML structure used in Documentation/service.txt
+        # Use escaped wildcard '\%h' in the name to match the documented example.
+        service_xml = (
+            "<?xml version=\"1.0\" standalone='no'?>\n"
+            "<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n"
+            "<service-group>\n"
+            f"<name replace-wildcards=\"yes\">{self._service_name} on \\%h</name>\n"
+            "<service protocol=\"ipv4\">\n"
+            f"<type>{self._service_type}</type>\n"
+            f"<port>{self.port}</port>\n"
+            f"<txt-record>dSUID={self.dsuid}</txt-record>\n"
+            "</service>\n"
+            "</service-group>\n"
         )
-
-        service_xml = f"""<?xml version="1.0" standalone="no"?>
-<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
-<service-group>
-  <name replace-wildcards="yes">{self._service_name}</name>
-  <service protocol="ipv4">
-    <type>_ds-vdc._tcp</type>
-    <port>{self.port}</port>
-{txt_entries}  </service>
-</service-group>
-"""
 
         service_file = f"/etc/avahi/services/ds-vdc-{self.port}.service"
 
