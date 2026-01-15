@@ -148,6 +148,10 @@ class VdSMSession:
         self.connected_at: Optional[float] = None
         self.last_activity: Optional[float] = None
         self.client_address: Optional[tuple] = None
+
+        # Track last received envelope message_id (when present and non-zero)
+        # This is used to generate next outgoing message ids (incremental)
+        self._last_received_message_id: Optional[int] = None
         
         # Keepalive management
         self._hello_timer: Optional[asyncio.Task] = None
@@ -287,7 +291,14 @@ class VdSMSession:
         # Create Pong response with same message ID and payload
         message = Message()
         message.type = VDC_SEND_PONG
-        message.message_id = ping_message.message_id
+        # Echo incoming id for Ping/Pong correlation when present
+        try:
+            if ping_message.HasField('message_id') and ping_message.message_id != 0:
+                message.message_id = ping_message.message_id
+        except Exception:
+            # Fallback for proto implementations without HasField
+            if int(ping_message.message_id) != 0:
+                message.message_id = ping_message.message_id
 
         # Populate the vdc_SendPong submessage (include host dSUID)
         try:
@@ -297,6 +308,20 @@ class VdSMSession:
             logger.debug("Unable to set vdc_send_pong.dSUID on Pong message")
 
         return message
+
+    def get_next_message_id(self) -> int:
+        """
+        Compute the next outgoing message id based on the last received id.
+
+        If a previous incoming message had a non-zero `message_id`, return
+        that value plus one. Otherwise return 1 as a safe default.
+        """
+        if self._last_received_message_id and int(self._last_received_message_id) != 0:
+            try:
+                return int(self._last_received_message_id) + 1
+            except Exception:
+                return 1
+        return 1
     
     def on_pong_received(self, pong_message: Message) -> None:
         """

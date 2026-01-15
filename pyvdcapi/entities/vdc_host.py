@@ -352,6 +352,32 @@ class VdcHost:
             f"vDC host started successfully - "
             f"listening for vdSM connections on port {self.port}"
         )
+
+    def _next_message_id(self) -> int:
+        """
+        Determine the next outgoing message id.
+
+        Uses the active session's `get_next_message_id()` when available,
+        otherwise returns 1 as a safe default.
+        """
+        if self._session:
+            try:
+                return self._session.get_next_message_id()
+            except Exception:
+                return 1
+        return 1
+
+    def _next_message_id_if_have_received(self) -> Optional[int]:
+        """
+        Return the next outgoing message id only if we've previously
+        received a non-zero message_id from vdSM. Otherwise return None.
+        """
+        if self._session and getattr(self._session, '_last_received_message_id', None):
+            try:
+                return self._session.get_next_message_id()
+            except Exception:
+                return None
+        return None
     
     async def stop(self) -> None:
         """
@@ -536,6 +562,26 @@ class VdcHost:
                 except Exception:
                     # on_connected may warn if state unexpected, but proceed
                     logger.debug("Session on_connected raised during Hello handling")
+
+            # Record incoming envelope message_id (when present) so we can
+            # generate next outgoing ids based on the last received one.
+            try:
+                has_id = message.HasField('message_id')
+            except Exception:
+                has_id = False
+
+            if has_id and int(message.message_id) != 0:
+                if not self._session:
+                    # Create session object if somehow missing
+                    self._session = VdSMSession(
+                        vdc_host_dsuid=self.dsuid,
+                        on_disconnected_callback=self._on_session_disconnected
+                    )
+                try:
+                    self._session._last_received_message_id = int(message.message_id)
+                except Exception:
+                    # best-effort, ignore if unable to set
+                    logger.debug("Unable to record last_received_message_id")
 
             # Route message to appropriate handler
             response = await self._message_router.route(message)
@@ -1703,7 +1749,13 @@ class VdcHost:
             return
         
         notification = Message()
-        notification.message_id = self._next_message_id()
+        # Use last-received id + 1 only when we've previously received an id
+        try:
+            next_id = self._next_message_id_if_have_received()
+            if next_id:
+                notification.message_id = int(next_id)
+        except Exception:
+            pass
         notification.vdc_notification_vanish.SetInParent()
         notification.vdc_notification_vanish.dSUID = dsuid
         
@@ -1744,7 +1796,13 @@ class VdcHost:
             return
         
         notification = Message()
-        notification.message_id = self._next_message_id()
+        # Use last-received id + 1 only when we've previously received an id
+        try:
+            next_id = self._next_message_id_if_have_received()
+            if next_id:
+                notification.message_id = int(next_id)
+        except Exception:
+            pass
         notification.vdc_send_push_property.SetInParent()
         notification.vdc_send_push_property.dSUID = dsuid
         
