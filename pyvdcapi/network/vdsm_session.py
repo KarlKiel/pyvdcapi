@@ -53,7 +53,6 @@ from typing import Optional, Callable, Awaitable
 from pyvdcapi.network.genericVDC_pb2 import (
     Message,
     VDC_RESPONSE_HELLO,
-    VDSM_SEND_PING,
     VDC_SEND_PONG,
 )
 
@@ -149,6 +148,10 @@ class VdSMSession:
         self.connected_at: Optional[float] = None
         self.last_activity: Optional[float] = None
         self.client_address: Optional[tuple] = None
+
+        # Track last received envelope message_id (when present and non-zero)
+        # This is used to generate next outgoing message ids (incremental)
+        self._last_received_message_id: Optional[int] = None
         
         # Keepalive management
         self._hello_timer: Optional[asyncio.Task] = None
@@ -288,7 +291,14 @@ class VdSMSession:
         # Create Pong response with same message ID and payload
         message = Message()
         message.type = VDC_SEND_PONG
-        message.message_id = ping_message.message_id
+        # Echo incoming id for Ping/Pong correlation when present
+        try:
+            if ping_message.HasField('message_id') and ping_message.message_id != 0:
+                message.message_id = ping_message.message_id
+        except Exception:
+            # Fallback for proto implementations without HasField
+            if int(ping_message.message_id) != 0:
+                message.message_id = ping_message.message_id
 
         # Populate the vdc_SendPong submessage (include host dSUID)
         try:
@@ -298,6 +308,20 @@ class VdSMSession:
             logger.debug("Unable to set vdc_send_pong.dSUID on Pong message")
 
         return message
+
+    def get_next_message_id(self) -> int:
+        """
+        Compute the next outgoing message id based on the last received id.
+
+        If a previous incoming message had a non-zero `message_id`, return
+        that value plus one. Otherwise return 1 as a safe default.
+        """
+        if self._last_received_message_id and int(self._last_received_message_id) != 0:
+            try:
+                return int(self._last_received_message_id) + 1
+            except Exception:
+                return 1
+        return 1
     
     def on_pong_received(self, pong_message: Message) -> None:
         """
@@ -420,62 +444,7 @@ class VdSMSession:
             # Normal cancellation when Hello is received
             pass
     
-    async def _keepalive_loop(self) -> None:
-        """
-        Background task: Send periodic Ping messages.
-        
-        Sends Ping every PING_INTERVAL seconds if no other activity.
-        If Pong isn't received within PONG_TIMEOUT, considers connection dead.
-        
-        This ensures:
-        - Detection of dead connections (network failures)
-        - Prevention of idle connection timeouts by firewalls/proxies
-        """
-        try:
-            while self.state == SessionState.ACTIVE:
-                # Wait for ping interval
-                await asyncio.sleep(self.PING_INTERVAL)
-                
-                # Check if we've had recent activity
-                # If so, skip ping (no need to ping if actively communicating)
-                if self.last_activity and (time.time() - self.last_activity) < self.PING_INTERVAL:
-                    continue
-                
-                # Send Ping
-                logger.debug("Sending Ping to vdSM")
-                ping_message = Message()
-                ping_message.type = VDSM_SEND_PING
-
-                # Assign a non-zero random message id for correlation
-                ping_message.message_id = random.getrandbits(31)
-                self._last_ping_id = ping_message.message_id
-
-                if self.writer:
-                    from .tcp_server import TCPServer
-                    # Clear previous pong event before sending a new ping
-                    self._pong_received.clear()
-                    await TCPServer.send_message(self.writer, ping_message)
-
-                    # Wait for Pong with timeout
-                    try:
-                        await asyncio.wait_for(
-                            self._pong_received.wait(),
-                            timeout=self.PONG_TIMEOUT
-                        )
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            f"Pong timeout - no response from vdSM within "
-                            f"{self.PONG_TIMEOUT} seconds, closing connection"
-                        )
-                        
-                        # Connection is dead
-                        self.writer.close()
-                        await self.writer.wait_closed()
-                        await self.on_disconnected()
-                        break
-        
-        except asyncio.CancelledError:
-            # Normal cancellation on disconnect
-            pass
-        except Exception as e:
-            logger.error(f"Error in keepalive loop: {e}", exc_info=True)
+    # No keepalive sender: the vDC host must NOT initiate Ping messages.
+    # Keepalive is driven by the vdSM; when vdSM sends Ping we reply with Pong
+    # in `on_ping_received`. This avoids the host sending unsolicited Ping
+    # messages and keeps the session unidirectional for keepalive initiation.

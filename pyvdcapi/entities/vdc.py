@@ -583,9 +583,19 @@ class Vdc:
         """
         message = Message()
         message.type = VDC_SEND_ANNOUNCE_VDC
-        # Set message_id explicitly so vdSM can correlate responses.
-        # Default is 0 for announcement notifications initiated by vDC.
-        message.message_id = int(message_id)
+        # Optionally set an envelope `message_id` when the host/session
+        # has a previously received id. In that case, use the host's
+        # helper to compute next id (last_received + 1). Otherwise
+        # keep the message_id absent on the wire.
+        try:
+            next_id = None
+            if hasattr(self, 'host') and self.host:
+                next_id = self.host._next_message_id_if_have_received()
+            if next_id:
+                message.message_id = int(next_id)
+        except Exception:
+            # Best-effort: if anything goes wrong, leave message_id unset
+            pass
         
         # Create announcement with vDC properties
         announce = message.vdc_send_announce_vdc

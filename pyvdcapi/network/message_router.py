@@ -220,15 +220,23 @@ class MessageRouter:
             
             # If handler returned a response, ensure message_id is set
             if response:
-                # Ensure response echoes the incoming message_id so that
-                # notification-style requests (e.g. vdsm_SendPing) get
-                # a Pong with the same id. Copy unconditionally — the
-                # value will be 0 if the request did not include an id.
-                response.message_id = message.message_id
+                # Only echo the incoming message_id when it is non-zero.
+                # In proto3 scalar fields default to 0 and do not have
+                # presence, so copying a 0 explicitly makes the field
+                # appear set in logs even though it is semantically
+                # absent on the wire. Avoid setting the envelope id
+                # when the incoming id is 0.
+                try:
+                    incoming_id = int(message.message_id)
+                except Exception:
+                    incoming_id = 0
+
+                if incoming_id != 0:
+                    response.message_id = message.message_id
 
                 logger.debug(
                     f"Handler returned response: type={response.type}, "
-                    f"message_id={response.message_id}"
+                    f"message_id={getattr(response, 'message_id', None)}"
                 )
             else:
                 logger.debug("Handler returned no response (notification)")
@@ -309,7 +317,8 @@ class MessageRouter:
         """
         response = Message()
         response.type = GENERIC_RESPONSE
-        response.message_id = message_id
+        if message_id != 0:
+            response.message_id = message_id
         
         # Set error in response (map to valid protobuf ResultCode)
         # Import pb module locally to avoid adding a top-level dependency
