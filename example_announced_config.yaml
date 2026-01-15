@@ -24,4 +24,31 @@ vdcs:
       metering: false
       identification: false
       dynamicDefinitions: true
-vdsds: {}
+vdsds:
+  000000027F9202F411B8B5822402000000:
+    dSUID: 000000027F9202F411B8B5822402000000
+    type: vdSD
+    model: KarlKiel
+    modelUID: karlkiel
+    vendorName: KarlKiel
+    name: werer
+    active: true
+    displayId: ''
+    modelVersion: '1.0'
+    primaryGroup: 1
+    modelFeatures: {}
+    zoneID: 60586
+    vdc_dSUID: 000000017F9202F411B8B5822402000000
+    controlValues:
+      BrightnessZone: 15.986375139674847
+      TemperatureZone: 22.100000000000023
+      CarbonDioxide: 634.5999009812872
+      TemperatureSetPoint: 19.00000000000003
+      TemperatureOutside: 0.30000000000001137
+      HumidityZone: 19.0
+      WindDirection: 1248.0
+      HumidityOutside: 99.0
+      WindSpeed: 0.0
+      GustSpeed: 0.0
+      AirPressure: 3414.0
+      Precipitation: 0.0

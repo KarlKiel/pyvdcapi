@@ -128,6 +128,7 @@ from ..properties.common import CommonProperties
 from ..properties.vdsd_props import VdSDProperties
 from ..properties.property_tree import PropertyTree
 from ..utils.callbacks import Observable
+from ..properties.control_value import ControlValues
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,14 @@ class VdSD:
             primary_group=primary_group,
             **vdsd_config
         )
+
+        # Control values container (in-memory representation)
+        # Load persisted controlValues if present
+        try:
+            persisted_cvs = vdsd_config.get('controlValues', {}) if isinstance(vdsd_config, dict) else {}
+        except Exception:
+            persisted_cvs = {}
+        self.controlValues = ControlValues(persisted_cvs)
         
         # Device components
         # These will hold the actual input/output/scene components
@@ -1134,10 +1143,27 @@ class VdSD:
         logger.debug(f"Setting vdSD properties: {prop_dict.keys()}")
         
         # Update common properties
-        self._common_props.update(prop_dict)
-        
+        try:
+            self._common_props.update_from_dict(prop_dict)
+        except Exception:
+            # Fallback if object doesn't provide update_from_dict
+            for k, v in prop_dict.items():
+                try:
+                    self._common_props.set_property(k, v)
+                except Exception:
+                    pass
+
         # Update vdSD-specific properties
-        self._vdsd_props.update(prop_dict)
+        try:
+            # Use dedicated update method when available
+            self._vdsd_props.update_from_dict(prop_dict)
+        except Exception:
+            # Fallback: attempt to set writable properties via set_property
+            for k, v in prop_dict.items():
+                try:
+                    self._vdsd_props.set_property(k, v)
+                except Exception:
+                    pass
         
         # Handle output value changes from vdSM
         if 'outputs' in prop_dict:
@@ -1169,9 +1195,15 @@ class VdSD:
 
         announce = message.vdc_send_announce_device
         announce.dSUID = self.dsuid
-        
-        # Add device properties to announcement
-        # announce.properties.CopyFrom(self.get_properties(None))
+        # vdc_SendAnnounceDevice requires the owning vDC dSUID as well
+        try:
+            announce.vdc_dSUID = self.vdc.dsuid
+        except Exception:
+            # Ensure message remains conformant: set empty string if unavailable
+            try:
+                announce.vdc_dSUID = ""
+            except Exception:
+                pass
         
         logger.debug(f"Created device announcement for {self.dsuid}")
         
@@ -1627,16 +1659,44 @@ class VdSD:
             device.set_control_value("valve_position", 75.0)
         """
         logger.info(f"Set control '{control_name}' to {value} on device {self.dsuid}")
-        
-        # Store control value
-        if not hasattr(self, '_control_values'):
-            self._control_values = {}
-        
-        self._control_values[control_name] = value
-        
+
+        # Update or create ControlValue instance in container
+        try:
+            cv = self.controlValues.set(control_name, value)
+        except Exception:
+            # Fallback: ensure a dict container exists
+            if not hasattr(self, '_control_values'):
+                self._control_values = {}
+            self._control_values[control_name] = value
+
         # Trigger hardware callback if registered
-        if self._hardware_callbacks.get('on_control_change'):
-            self._hardware_callbacks['on_control_change'](control_name, value)
+        try:
+            if getattr(self, '_hardware_callbacks', None) and self._hardware_callbacks.get('on_control_change'):
+                self._hardware_callbacks['on_control_change'](control_name, value)
+        except Exception:
+            pass
+
+        # Persist control values mapping so it is available via persistence for vdSM queries
+        try:
+            if hasattr(self, '_persistence') and self._persistence:
+                # Persist full controlValues dict under 'controlValues'
+                self._persistence.update_vdsd_property(self.dsuid, 'controlValues', self.controlValues.to_persistence())
+        except Exception as e:
+            logger.warning(f"Unable to persist control value for {self.dsuid}: {e}")
+
+        # Notify vdSM about the updated control value (async)
+        try:
+            host = getattr(self.vdc, 'host', None)
+            if host and hasattr(host, 'send_push_notification'):
+                try:
+                    asyncio.get_event_loop().create_task(
+                        host.send_push_notification(self.dsuid, {'controlValues': {control_name: float(value)}})
+                    )
+                except RuntimeError:
+                    # No running event loop; ignore push
+                    pass
+        except Exception:
+            pass
     
     async def _send_push_notification(self, properties: Optional[dict] = None) -> None:
         """

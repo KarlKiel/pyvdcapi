@@ -173,6 +173,19 @@ class VdSDProperties:
     def get_model_features(self) -> Dict[str, bool]:
         """Get model features."""
         return self._properties.get('modelFeatures', {}).copy()
+
+    def update_from_dict(self, data: Dict[str, Any]) -> None:
+        """
+        Update writable vdSD-specific properties from a dict.
+
+        Only supported writable properties are applied via `set_property`.
+        """
+        for key, value in data.items():
+            try:
+                self.set_property(key, value)
+            except Exception:
+                # Ignore unsupported properties
+                pass
     
     def add_model_feature(self, feature: str, enabled: bool = True) -> None:
         """
