@@ -42,7 +42,13 @@ vdsds:
     controlValues:
       BrightnessZone: 15.986375139674847
       TemperatureZone: 22.100000000000023
-      CarbonDioxide: 630.957344480193
+      CarbonDioxide: 634.5999009812872
       TemperatureSetPoint: 19.00000000000003
-      TemperatureOutside: -0.27499999999997726
+      TemperatureOutside: 0.30000000000001137
       HumidityZone: 19.0
+      WindDirection: 1248.0
+      HumidityOutside: 99.0
+      WindSpeed: 0.0
+      GustSpeed: 0.0
+      AirPressure: 3414.0
+      Precipitation: 0.0
