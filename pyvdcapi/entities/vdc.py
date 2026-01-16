@@ -239,10 +239,13 @@ class Vdc:
         # Device management
         # Key: vdSD dSUID, Value: VdSD instance
         self._vdsds: Dict[str, 'VdSD'] = {}
-        
-        # Load persisted devices
-        # This will be implemented when VdSD class is ready
-        # self._load_vdsds()
+
+        # Load persisted devices so they are available immediately
+        # for property queries and announcements.
+        try:
+            self._load_vdsds()
+        except Exception:
+            logger.exception("Error while loading persisted vdSDs during vDC init")
         
         logger.info(
             f"vDC initialized: name='{self._common_props.get_property('name')}', "
@@ -648,20 +651,42 @@ class Vdc:
         """
         # Get all vdSDs for this vDC from persistence
         vdsd_configs = self._persistence.get_vdsds_for_vdc(self.dsuid)
-        
+
         logger.info(f"Loading {len(vdsd_configs)} persisted devices for vDC {self.dsuid}")
-        
+
+        from .vdsd import VdSD
+
         for dsuid, config in vdsd_configs.items():
             try:
-                # Create VdSD from persisted config
-                # This will be implemented when VdSD class is ready
-                # vdsd = VdSD.from_config(self, config)
-                # self._vdsds[dsuid] = vdsd
-                
-                logger.debug(f"Loaded vdSD {dsuid}")
+                # Extract needed properties for constructor
+                name = config.get('name', '')
+                model = config.get('model', '')
+                primary_group = config.get('primaryGroup', config.get('primary_group', 0))
+                enumeration = config.get('enumeration', 0)
+                model_uid = config.get('model_uid', config.get('modelUID', None))
+                model_version = config.get('model_version', config.get('modelVersion', '1.0'))
+
+                # Instantiate VdSD - its constructor will read its own persisted
+                # configuration (including controlValues) from the shared persistence.
+                vdsd = VdSD(
+                    vdc=self,
+                    name=name,
+                    model=model,
+                    primary_group=primary_group,
+                    mac_address=self.host._mac_address,
+                    vendor_id=self.host._vendor_id,
+                    enumeration=enumeration,
+                    model_uid=model_uid,
+                    model_version=model_version
+                )
+
+                # Add to collection using the generated/loaded dSUID
+                self._vdsds[vdsd.dsuid] = vdsd
+
+                logger.info(f"Loaded vdSD {vdsd.dsuid} ({name})")
             except Exception as e:
                 logger.error(f"Failed to load vdSD {dsuid}: {e}", exc_info=True)
-        
+
         logger.info(f"Loaded {len(self._vdsds)} devices successfully")
     
     def get_device_count(self) -> int:
