@@ -344,7 +344,11 @@ class VdcHost:
                 )
         
         # Load persisted vDCs (implementation depends on Vdc class)
-        # await self._load_vdcs()
+        # Load persisted vDCs so they can be announced after handshake
+        try:
+            await self._load_vdcs()
+        except Exception:
+            logger.exception("Failed to load persisted vDCs on startup")
         
         self._running = True
         
@@ -662,11 +666,28 @@ class VdcHost:
 
                             # Announce devices for this vDC
                             try:
-                                for dev_msg in vdc.announce_devices():
+                                dev_msgs = vdc.announce_devices()
+                                if dev_msgs:
+                                    for dev_msg in dev_msgs:
+                                        try:
+                                            await TCPServer.send_message(writer, dev_msg)
+                                        except Exception as e:
+                                            logger.warning(f"Failed to send announce device: {e}")
+                                else:
+                                    # Fallback: create announce messages from persistence
                                     try:
-                                        await TCPServer.send_message(writer, dev_msg)
+                                        vdsd_configs = self._persistence.get_vdsds_for_vdc(vdc.dsuid)
+                                        for dsuid, cfg in vdsd_configs.items():
+                                            try:
+                                                m = Message()
+                                                m.type = genericVDC_pb2.VDC_SEND_ANNOUNCE_DEVICE
+                                                m.vdc_send_announce_device.dSUID = dsuid
+                                                m.vdc_send_announce_device.vdc_dSUID = vdc.dsuid
+                                                await TCPServer.send_message(writer, m)
+                                            except Exception as e:
+                                                logger.warning(f"Failed to send persisted announce device {dsuid}: {e}")
                                     except Exception as e:
-                                        logger.warning(f"Failed to send announce device: {e}")
+                                        logger.warning(f"Failed to enumerate persisted devices for vDC {vdc.dsuid}: {e}")
                             except Exception as e:
                                 logger.warning(f"Failed to create device announcements for vDC {vdc.dsuid}: {e}")
                     except Exception as e:
@@ -1105,6 +1126,43 @@ class VdcHost:
         logger.info(f"Created vDC: {vdc}")
         
         return vdc
+
+    async def _load_vdcs(self) -> None:
+        """
+        Load persisted vDC configurations from persistence and instantiate
+        corresponding Vdc objects so they can be announced to vdSM.
+        """
+        # Import here to avoid circular import
+        from .vdc import Vdc
+
+        try:
+            vdc_configs = self._persistence.get_all_vdcs()
+            if not vdc_configs:
+                logger.debug("No persisted vDCs found to load")
+                return
+
+            for dsuid, cfg in vdc_configs.items():
+                try:
+                    # Extract enumeration if present so DSUID generation matches
+                    enumeration = cfg.get('enumeration', 0)
+                    # Create Vdc instance using persisted properties
+                    vdc = Vdc(
+                        host=self,
+                        mac_address=self._mac_address,
+                        vendor_id=self._vendor_id,
+                        persistence=self._persistence,
+                        model=cfg.get('model', ''),
+                        model_uid=cfg.get('model_uid', cfg.get('modelUID', '')),
+                        model_version=cfg.get('model_version', cfg.get('modelVersion', '1.0')),
+                        enumeration=enumeration,
+                        name=cfg.get('name', '')
+                    )
+                    self._vdcs[vdc.dsuid] = vdc
+                    logger.info(f"Loaded persisted vDC {vdc.dsuid}")
+                except Exception as e:
+                    logger.error(f"Failed to restore vDC {dsuid}: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Error while loading persisted vDCs: {e}", exc_info=True)
     
     def is_running(self) -> bool:
         """Check if host is running."""
