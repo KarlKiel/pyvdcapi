@@ -52,13 +52,13 @@ from .sensor import Sensor
 from .actions import ActionManager, StateManager, DevicePropertyManager, ActionParameter
 
 __all__ = [
-    'Output',
-    'OutputChannel',
-    'Button',
-    'BinaryInput',
-    'Sensor',
-    'ActionManager',
-    'StateManager',
-    'DevicePropertyManager',
-    'ActionParameter',
+    "Output",
+    "OutputChannel",
+    "Button",
+    "BinaryInput",
+    "Sensor",
+    "ActionManager",
+    "StateManager",
+    "DevicePropertyManager",
+    "ActionParameter",
 ]

@@ -22,7 +22,7 @@ import socket
 # Allow running from repository examples/ folder
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyvdcapi.entities import VdcHost
+from pyvdcapi.entities import VdcHost  # noqa: E402
 
 
 def ask(prompt: str, default: str = "") -> str:
@@ -95,7 +95,7 @@ async def main():
         print("Stopped.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

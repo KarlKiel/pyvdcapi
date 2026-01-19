@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import time
 
@@ -17,11 +17,11 @@ class ControlValue:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'name': self.name,
-            'value': self.value,
-            'group': self.group,
-            'zone_id': self.zone_id,
-            'last_updated': self.last_updated,
+            "name": self.name,
+            "value": self.value,
+            "group": self.group,
+            "zone_id": self.zone_id,
+            "last_updated": self.last_updated,
         }
 
 
@@ -36,10 +36,10 @@ class ControlValues:
                     try:
                         cv = ControlValue(
                             name=k,
-                            value=v.get('value', 0.0),
-                            group=v.get('group'),
-                            zone_id=v.get('zone_id', v.get('zoneId')),
-                            last_updated=v.get('last_updated', 0.0),
+                            value=v.get("value", 0.0),
+                            group=v.get("group"),
+                            zone_id=v.get("zone_id", v.get("zoneId")),
+                            last_updated=v.get("last_updated", 0.0),
                         )
                     except Exception:
                         # fallback to simple value

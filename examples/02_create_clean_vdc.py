@@ -21,7 +21,7 @@ import socket
 # allow running from repo root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyvdcapi.entities import VdcHost
+from pyvdcapi.entities import VdcHost  # noqa: E402
 
 
 def ask(prompt: str, default: str = "") -> str:
@@ -93,7 +93,8 @@ async def main():
     if host.is_connected():
         print("vdSM handshake complete — ready to announce vDCs.")
     else:
-        print(f"No vdSM connected after {int(wait_seconds)}s — you can still create a vDC, but announces will be queued until a vdSM connects.")
+        print(f"No vdSM connected after {int(wait_seconds)}s.")
+        print("You can still create a vDC, but announces will be queued until a vdSM connects.")
 
     # Optionally create a vDC and announce it (interactive)
     create_resp = ask("Create a new vDC to announce? (y/N)", "N").lower()
@@ -107,6 +108,7 @@ async def main():
         if host._session and host._session.writer:
             try:
                 from pyvdcapi.network.tcp_server import TCPServer
+
                 msg = vdc.announce_to_vdsm()
                 await TCPServer.send_message(host._session.writer, msg)
                 print(f"Sent announcevdc for vDC {vdc.dsuid}")
@@ -128,7 +130,7 @@ async def main():
         print("Stopped.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

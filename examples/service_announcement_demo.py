@@ -15,7 +15,7 @@ Requirements:
 For Avahi (Linux only, requires root):
     # Ensure avahi-daemon is running
     sudo systemctl status avahi-daemon
-    
+
     # Run with use_avahi=True
 """
 
@@ -25,27 +25,25 @@ import sys
 
 # Add parent directory to path for imports
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyvdcapi.entities import VdcHost
-from pyvdcapi.core.constants import DSGroup, DSChannelType
+from pyvdcapi.entities import VdcHost  # noqa: E402
+from pyvdcapi.core.constants import DSGroup, DSChannelType  # noqa: E402
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 async def main():
     """Run vDC host with service announcement."""
-    
+
     print("=" * 70)
     print("vDC Host with Service Announcement Demo")
     print("=" * 70)
     print()
-    
+
     # Create vDC host with service announcement enabled
     # Use zeroconf (cross-platform) by default
     # Set use_avahi=True on Linux for native Avahi daemon
@@ -59,69 +57,51 @@ async def main():
         model_version="1.0",
         persistence_file="demo_announced_config.yaml",
         announce_service=True,  # Enable service announcement
-        use_avahi=False  # Use zeroconf (set to True for Avahi on Linux)
+        use_avahi=False,  # Use zeroconf (set to True for Avahi on Linux)
     )
-    
+
     print(f"✓ Created vDC host: {host._common_props.get_name()}")
     print(f"  dSUID: {host.dsuid}")
     print(f"  Port: {host.port}")
     print(f"  Service announcement: {'Enabled (zeroconf)' if not host._service_announcer else 'Enabled'}")
     print()
-    
+
     # Create a lighting vDC
-    light_vdc = host.create_vdc(
-        name="Demo Light Controller",
-        model="Generic Light vDC"
-    )
+    light_vdc = host.create_vdc(name="Demo Light Controller", model="Generic Light vDC")
     print(f"✓ Created vDC: {light_vdc._common_props.get_name()}")
     print(f"  dSUID: {light_vdc.dsuid}")
     print()
-    
+
     # Add some devices
-    dimmer = light_vdc.create_vdsd(
-        name="Living Room Dimmer",
-        model="Dimmer 1ch",
-        primary_group=DSGroup.YELLOW
-    )
-    dimmer.add_output_channel(
-        channel_type=DSChannelType.BRIGHTNESS,
-        channel_id="brightness",
-        resolution=1.0
-    )
+    dimmer = light_vdc.create_vdsd(name="Living Room Dimmer", model="Dimmer 1ch", primary_group=DSGroup.YELLOW)
+    dimmer.add_output_channel(channel_type=DSChannelType.BRIGHTNESS, channel_id="brightness", resolution=1.0)
     print(f"✓ Created device: {dimmer._common_props.get_name()}")
     print(f"  dSUID: {dimmer.dsuid}")
     print()
-    
-    switch = light_vdc.create_vdsd(
-        name="Kitchen Light Switch",
-        model="Switch 1ch",
-        primary_group=DSGroup.YELLOW
-    )
-    switch.add_output_channel(
-        channel_type=DSChannelType.BRIGHTNESS,
-        channel_id="brightness",
-        resolution=1.0
-    )
+
+    switch = light_vdc.create_vdsd(name="Kitchen Light Switch", model="Switch 1ch", primary_group=DSGroup.YELLOW)
+    switch.add_output_channel(channel_type=DSChannelType.BRIGHTNESS, channel_id="brightness", resolution=1.0)
     print(f"✓ Created device: {switch._common_props.get_name()}")
     print(f"  dSUID: {switch.dsuid}")
     print()
-    
+
     # Start the host
     print("=" * 70)
     print("Starting vDC host...")
     print("=" * 70)
     print()
-    
+
     await host.start()
-    
+
     print()
     print("=" * 70)
     print("vDC Host is now running and discoverable!")
     print("=" * 70)
     print()
     print("Service Details:")
-    print(f"  Service Type: _ds-vdc._tcp")
-    print(f"  Service Name: digitalSTROM vDC host on {host._service_announcer._service_name if host._service_announcer else 'N/A'}")
+    print("  Service Type: _ds-vdc._tcp")
+    service_name = host._service_announcer._service_name if host._service_announcer else "N/A"
+    print(f"  Service Name: digitalSTROM vDC host on {service_name}")
     print(f"  Port: {host.port}")
     print()
     print("How to discover this host:")
@@ -143,7 +123,7 @@ async def main():
     print("Press Ctrl+C to stop")
     print("=" * 70)
     print()
-    
+
     try:
         # Keep running until interrupted
         while True:
@@ -151,7 +131,7 @@ async def main():
     except KeyboardInterrupt:
         print()
         print("Shutting down...")
-        
+
     finally:
         await host.stop()
         print("✓ vDC host stopped")

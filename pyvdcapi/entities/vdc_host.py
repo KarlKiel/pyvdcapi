@@ -87,7 +87,7 @@ Threading Model:
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any, Callable, Awaitable
+from typing import Dict, List, Optional, Any
 from pyvdcapi.network.genericVDC_pb2 import (
     Message,
     VDSM_REQUEST_HELLO,
@@ -123,6 +123,7 @@ from ..properties.property_tree import PropertyTree
 
 # Import Vdc class (placed after to avoid circular import)
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from .vdc import Vdc
 
@@ -132,37 +133,37 @@ logger = logging.getLogger(__name__)
 class VdcHost:
     """
     Top-level container for vDC API implementation.
-    
+
     The VdcHost represents the root of the vDC hierarchy. It owns:
     - TCP server for vdSM communication
     - Session manager for connection lifecycle
     - Message router for protocol handling
     - Persistence layer for configuration
     - Collection of vDCs (virtual device connectors)
-    
+
     Protocol Implementation:
     - Responds to Hello with host dSUID and API version
     - Handles property get/set for host properties
     - Routes vDC/vdSD queries to appropriate entities
     - Manages vDC announcements when vdSM requests device discovery
     - Forwards device notifications to vdSM
-    
+
     Configuration Persistence:
     - Saves host properties to YAML
     - Delegates vDC/vdSD persistence to child entities
     - Auto-saves on property changes (configurable)
     - Shadow backup for safe writes
-    
+
     Attributes:
         port: TCP port for vdSM connections (default 8444)
         dsuid: digitalSTROM unique ID for this host
         session: Current vdSM session (None if disconnected)
         vdcs: Dictionary of vDCs managed by this host
     """
-    
+
     # vDC API version implemented
     API_VERSION = "2.0"
-    
+
     def __init__(
         self,
         name: str,
@@ -178,11 +179,11 @@ class VdcHost:
         announce_service: bool = False,
         use_avahi: bool = False,
         service_host_name: Optional[str] = None,
-        **properties
+        **properties,
     ):
         """
         Initialize vDC host.
-        
+
         Args:
             name: User-specified name for the host (required)
             port: TCP port to listen on (default 8444)
@@ -198,7 +199,7 @@ class VdcHost:
             announce_service: Enable mDNS/DNS-SD service announcement for auto-discovery (default: False)
             use_avahi: Use Avahi daemon instead of zeroconf library (requires Linux + root, default: False)
             **properties: Additional host properties
-        
+
         Example:
             host = VdcHost(
                 name="Home Automation Hub",
@@ -213,124 +214,118 @@ class VdcHost:
         # Store for later use in creating vDCs
         self._mac_address = mac_address
         self._vendor_id = vendor_id
-        
+
         # Generate host dSUID
         # Note: dSUID must be deterministic (same MAC = same dSUID)
         # This allows vdSM to recognize the host across restarts
         dsuid_gen = DSUIDGenerator(mac_address, vendor_id)
         self.dsuid = dsuid_gen.generate(DSUIDNamespace.VDCHOST)
-        
+
         logger.info(f"Initializing vDC host with dSUID: {self.dsuid}")
-        
+
         # Network components
         self.port = port
         self._tcp_server: Optional[TCPServer] = None
         self._session: Optional[VdSMSession] = None
-        
+
         # Message routing
         self._message_router = MessageRouter()
         self._setup_message_handlers()
-        
+
         # Persistence
         self._persistence = YAMLPersistence(
-            file_path=persistence_file,
-            auto_save=auto_save,
-            enable_backup=enable_backup
+            file_path=persistence_file, auto_save=auto_save, enable_backup=enable_backup
         )
-        
+
         # Load or initialize host configuration
         host_config = self._persistence.get_vdc_host()
         if not host_config:
             # First time setup - save initial config
             host_config = {
-                'dSUID': self.dsuid,
-                'type': 'vDChost',
-                'name': name,
-                'model': model,
-                'model_uid': model_uid,
-                'model_version': model_version,
-                'vendor_id': vendor_id,
-                'api_version': self.API_VERSION,
-                **properties
+                "dSUID": self.dsuid,
+                "type": "vDChost",
+                "name": name,
+                "model": model,
+                "model_uid": model_uid,
+                "model_version": model_version,
+                "vendor_id": vendor_id,
+                "api_version": self.API_VERSION,
+                **properties,
             }
             self._persistence.set_vdc_host(host_config)
-        
+
         # Common properties (dSUID, name, model, etc.)
         # Use constructor parameters as defaults if not in persisted config
         # Extract explicitly handled properties from host_config to avoid duplicates
-        extra_props = {k: v for k, v in host_config.items() 
-                      if k not in ['name', 'model', 'model_uid', 'model_version', 'vendor_id', 'api_version']}
-        
+        extra_props = {
+            k: v
+            for k, v in host_config.items()
+            if k not in ["name", "model", "model_uid", "model_version", "vendor_id", "api_version"]
+        }
+
         self._common_props = CommonProperties(
             dsuid=self.dsuid,
-            entity_type='vDChost',
-            name=host_config.get('name', name),
-            model=host_config.get('model', model),
-            model_uid=host_config.get('model_uid', model_uid),
-            model_version=host_config.get('model_version', model_version) or "",
-            **extra_props
+            entity_type="vDChost",
+            name=host_config.get("name", name),
+            model=host_config.get("model", model),
+            model_uid=host_config.get("model_uid", model_uid),
+            model_version=host_config.get("model_version", model_version) or "",
+            **extra_props,
         )
-        
+
         # vDC management
         # Key: vDC dSUID, Value: Vdc instance
-        self._vdcs: Dict[str, 'Vdc'] = {}
-        
+        self._vdcs: Dict[str, "Vdc"] = {}
+
         # Service announcement (optional)
         self._announce_service = announce_service
         self._service_announcer: Optional[ServiceAnnouncer] = None
         if announce_service:
             self._service_announcer = ServiceAnnouncer(
-                port=self.port,
-                dsuid=self.dsuid,
-                host_name=service_host_name,
-                use_avahi=use_avahi
+                port=self.port, dsuid=self.dsuid, host_name=service_host_name, use_avahi=use_avahi
             )
-            logger.info(
-                f"Service announcement enabled using {'Avahi' if use_avahi else 'zeroconf'}"
-            )
-        
+            logger.info(f"Service announcement enabled using {'Avahi' if use_avahi else 'zeroconf'}")
+
         # State tracking
         self._running = False
-        
+
         logger.info(
             f"vDC host initialized: name='{self._common_props.get_name()}', "
             f"model='{self._common_props.get_property('model')}'"
         )
-    
+
     async def start(self) -> None:
         """
         Start the vDC host and begin accepting vdSM connections.
-        
+
         This:
         1. Creates and starts the TCP server
         2. Begins listening for vdSM connections
         3. Loads any persisted vDCs from configuration
         4. Transitions to running state
-        
+
         After calling start(), the host will:
         - Accept exactly one vdSM connection at a time
         - Respond to protocol messages (Hello, property queries, etc.)
         - Forward device notifications to vdSM
-        
+
         Raises:
             OSError: If port is already in use
             RuntimeError: If host is already running
         """
         if self._running:
             raise RuntimeError("vDC host already running")
-        
+
         logger.info(f"Starting vDC host on port {self.port}...")
-        
+
         # Create TCP server with our message handler
         self._tcp_server = TCPServer(
-            port=self.port,
-            message_handler=self._handle_message,
-            host='0.0.0.0'  # Listen on all interfaces
+            port=self.port, message_handler=self._handle_message, host="0.0.0.0"  # Listen on all interfaces
         )
-        
+
         # Start listening
         await self._tcp_server.start()
-        
+
         # Start service announcement if enabled
         if self._service_announcer:
             success = await self._service_announcer.start()
@@ -342,20 +337,17 @@ class VdcHost:
                     "vDC host will still work but won't be auto-discoverable. "
                     "Install 'zeroconf' package: pip install zeroconf"
                 )
-        
+
         # Load persisted vDCs (implementation depends on Vdc class)
         # Load persisted vDCs so they can be announced after handshake
         try:
             await self._load_vdcs()
         except Exception:
             logger.exception("Failed to load persisted vDCs on startup")
-        
+
         self._running = True
-        
-        logger.info(
-            f"vDC host started successfully - "
-            f"listening for vdSM connections on port {self.port}"
-        )
+
+        logger.info(f"vDC host started successfully - " f"listening for vdSM connections on port {self.port}")
 
     def _next_message_id(self) -> int:
         """
@@ -376,32 +368,32 @@ class VdcHost:
         Return the next outgoing message id only if we've previously
         received a non-zero message_id from vdSM. Otherwise return None.
         """
-        if self._session and getattr(self._session, '_last_received_message_id', None):
+        if self._session and getattr(self._session, "_last_received_message_id", None):
             try:
                 return self._session.allocate_next_message_id()
             except Exception:
                 return None
         return None
-    
+
     async def stop(self) -> None:
         """
         Stop the vDC host and close all connections.
-        
+
         This:
         1. Closes active vdSM session (sends Bye if connected)
         2. Stops the TCP server
         3. Saves current configuration
         4. Transitions to stopped state
-        
+
         This is a graceful shutdown - all pending operations complete
         before the host fully stops.
         """
         if not self._running:
             logger.warning("vDC host not running")
             return
-        
+
         logger.info("Stopping vDC host...")
-        
+
         # Close active session if any
         if self._session and self._session.is_connected():
             # Close the writer/connection and notify session
@@ -420,72 +412,68 @@ class VdcHost:
                 await self._session.on_disconnected()
             except Exception as e:
                 logger.error(f"Error during session disconnection handling: {e}")
-        
+
         # Stop service announcement
         if self._service_announcer:
             await self._service_announcer.stop()
             logger.info("Service announcement stopped")
-        
+
         # Stop TCP server
         if self._tcp_server:
             await self._tcp_server.stop()
             self._tcp_server = None
-        
+
         # Final save of configuration
         try:
             self._persistence.save()
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
-        
+
         self._running = False
-        
+
         logger.info("vDC host stopped")
-    
+
     def save_config(self) -> None:
         """
         Save the complete vDC host configuration to persistence layer.
-        
+
         This saves:
         - Host common properties (name, model, etc.)
         - All vDC configurations
         - All vdSD configurations (via their respective vDCs)
-        
+
         The save is typically automatic (when auto_save=True), but this
         method can be called manually to force a save at any time.
-        
+
         Example:
             # Make changes to host
             host._common_props.set('name', 'Updated Host Name')
-            
+
             # Manually save all configurations
             host.save_config()
         """
         # Save host configuration
-        host_config = {
-            'dSUID': self.dsuid,
-            'type': 'vDChost',
-            **self._common_props.to_dict()
-        }
+        host_config = {"dSUID": self.dsuid, "type": "vDChost", **self._common_props.to_dict()}
         self._persistence.set_vdc_host(host_config)
-        
+
         # Force save to file
         self._persistence.save()
-        
+
         logger.info(f"Saved configuration for vDC host {self.dsuid}")
-    
+
     def _setup_message_handlers(self) -> None:
         """
         Register message handlers with the router.
-        
+
         This maps each vDC API message type to the appropriate handler method.
         Handlers are called when messages of that type are received from vdSM.
-        
+
         Message Handler Responsibilities:
         - Validate message content
         - Process the request/command
         - Generate appropriate response
         - Update state as needed
-        
+
         The router automatically handles:
         - Message ID correlation (request/response matching)
         - Error responses for exceptions
@@ -499,38 +487,33 @@ class VdcHost:
             VDSM_SEND_BYE: self._handle_bye,
             VDSM_SEND_PING: self._handle_ping,
             VDC_SEND_PONG: self._handle_pong,
-            
             # Property access
             VDSM_REQUEST_GET_PROPERTY: self._handle_get_property,
             VDSM_REQUEST_SET_PROPERTY: self._handle_set_property,
-            
             # Generic requests
             VDSM_REQUEST_GENERIC_REQUEST: self._handle_generic_request,
             # Generic responses from vdSM (errors, results)
             GENERIC_RESPONSE: self._handle_generic_response,
-            
             # Device management
             VDSM_SEND_REMOVE: self._handle_remove,
-            
             # Scene operations (notifications - no response expected)
             VDSM_NOTIFICATION_CALL_SCENE: self._handle_call_scene,
             VDSM_NOTIFICATION_SAVE_SCENE: self._handle_save_scene,
             VDSM_NOTIFICATION_UNDO_SCENE: self._handle_undo_scene,
             VDSM_NOTIFICATION_SET_LOCAL_PRIO: self._handle_set_local_prio,
             VDSM_NOTIFICATION_CALL_MIN_SCENE: self._handle_call_min_scene,
-            
             # Device identification
             VDSM_NOTIFICATION_IDENTIFY: self._handle_identify,
-            
             # Output control
             VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE: self._handle_set_output_channel_value,
             VDSM_NOTIFICATION_DIM_CHANNEL: self._handle_dim_channel,
             VDSM_NOTIFICATION_SET_CONTROL_VALUE: self._handle_set_control_value,
         }
-        
+
         # Wrap handlers to provide session when handler expects it.
         wrapped = {}
         for t, h in handlers.items():
+
             async def _make_call(msg, _h=h):
                 try:
                     # Try calling with session first (many handlers accept session)
@@ -542,25 +525,21 @@ class VdcHost:
             wrapped[t] = _make_call
 
         self._message_router.register_handlers(wrapped)
-        
+
         logger.debug(f"Registered {len(handlers)} message handlers")
-    
-    async def _handle_message(
-        self,
-        message: Message,
-        writer: asyncio.StreamWriter
-    ) -> None:
+
+    async def _handle_message(self, message: Message, writer: asyncio.StreamWriter) -> None:
         """
         Handle incoming message from vdSM.
-        
+
         This is the callback registered with TCPServer. It:
         1. Routes message through the message router
         2. Gets response from handler
         3. Sends response back to vdSM (if any)
-        
+
         The actual message processing is delegated to specific handler
         methods registered with the message router.
-        
+
         Args:
             message: Protobuf message received from vdSM
             writer: Stream writer to send response to
@@ -568,12 +547,12 @@ class VdcHost:
         try:
             # Special-case Hello: ensure session has writer and connected state
             from pyvdcapi.network.genericVDC_pb2 import VDSM_REQUEST_HELLO
+
             if message.type == VDSM_REQUEST_HELLO:
                 # Ensure session object exists and attach writer
                 if not self._session:
                     self._session = VdSMSession(
-                        vdc_host_dsuid=self.dsuid,
-                        on_disconnected_callback=self._on_session_disconnected
+                        vdc_host_dsuid=self.dsuid, on_disconnected_callback=self._on_session_disconnected
                     )
                 # Inform session of new connection (sets writer/state)
                 try:
@@ -585,15 +564,14 @@ class VdcHost:
             # Record incoming envelope message_id (when present) in the session
             # so the session can initialize/advance the next-outgoing id.
             try:
-                has_id = message.HasField('message_id')
+                has_id = message.HasField("message_id")
             except Exception:
                 has_id = False
 
             if has_id and int(message.message_id) != 0:
                 if not self._session:
                     self._session = VdSMSession(
-                        vdc_host_dsuid=self.dsuid,
-                        on_disconnected_callback=self._on_session_disconnected
+                        vdc_host_dsuid=self.dsuid, on_disconnected_callback=self._on_session_disconnected
                     )
                 try:
                     self._session.record_incoming_message_id(int(message.message_id))
@@ -610,51 +588,51 @@ class VdcHost:
         except Exception as e:
             # This should rarely happen as router catches handler exceptions
             logger.error(f"Unexpected error handling message: {e}", exc_info=True)
-    
+
     async def _handle_hello(self, message: Message) -> Optional[Message]:
         """
         Handle Hello request from vdSM.
-        
+
         The Hello message is the first message vdSM sends after connecting.
         It initiates the session and provides vdSM version information.
-        
+
         Response includes:
         - vDC host dSUID (identifies this host uniquely)
         - API version (protocol version we support)
         - Optional host name/model
-        
+
         Args:
             message: vdsm_RequestHello message
-        
+
         Returns:
             vdc_ResponseHello message with host identification
         """
         logger.info("Received Hello from vdSM")
-        
+
         # Create or update session
         if not self._session:
             self._session = VdSMSession(
-                vdc_host_dsuid=self.dsuid,
-                on_disconnected_callback=self._on_session_disconnected
+                vdc_host_dsuid=self.dsuid, on_disconnected_callback=self._on_session_disconnected
             )
-        
+
         # Notify session of Hello
         await self._session.on_hello_received(message)
-        
+
         # Create Hello response with message_id from request
         response = self._session.create_hello_response(message)
-        
+
         # Add additional host info to response if available
         # (Depends on your protobuf structure)
-        
+
         # Mark session as active
         await self._session.on_hello_sent()
-        
+
         logger.info("Sent Hello response to vdSM - session now ACTIVE")
         # After handshake, announce configured vDCs and their devices
         try:
-            writer = getattr(self._session, 'writer', None)
+            writer = getattr(self._session, "writer", None)
             if writer:
+
                 async def _announce_all():
                     try:
                         for vdc in list(self._vdcs.values()):
@@ -687,7 +665,9 @@ class VdcHost:
                                             except Exception as e:
                                                 logger.warning(f"Failed to send persisted announce device {dsuid}: {e}")
                                     except Exception as e:
-                                        logger.warning(f"Failed to enumerate persisted devices for vDC {vdc.dsuid}: {e}")
+                                        logger.warning(
+                                            f"Failed to enumerate persisted devices for vDC {vdc.dsuid}: {e}"
+                                        )
                             except Exception as e:
                                 logger.warning(f"Failed to create device announcements for vDC {vdc.dsuid}: {e}")
                     except Exception as e:
@@ -703,49 +683,49 @@ class VdcHost:
             logger.exception("Unexpected error scheduling vDC/device announces after Hello")
 
         return response
-    
+
     async def _handle_bye(self, message: Message) -> Optional[Message]:
         """
         Handle Bye notification from vdSM.
-        
+
         Bye signals that vdSM is disconnecting. We should:
         1. Acknowledge the Bye
         2. Clean up session
         3. Close connection
-        
+
         Args:
             message: vdsm_SendBye message
-        
+
         Returns:
             Generic acknowledgment response (optional)
         """
         logger.info("Received Bye from vdSM")
-        
+
         if self._session:
             await self._session.on_bye_received(message)
-        
+
         # Note: Connection cleanup happens in TCP server
-        
+
         return None  # No response needed for Bye
-    
+
     async def _handle_ping(self, message: Message) -> Optional[Message]:
         """
         Handle Ping from vdSM.
-        
+
         Ping/Pong is used for keepalive and connectivity testing.
         We must respond with Pong.
-        
+
         Args:
             message: vdsm_SendPing message
-        
+
         Returns:
             vdc_SendPong message
         """
         logger.debug("Received Ping from vdSM, sending Pong")
-        
+
         if self._session:
             return await self._session.on_ping_received(message)
-        
+
         # If no session, still respond with Pong
         response = Message()
         response.type = VDC_SEND_PONG
@@ -757,66 +737,66 @@ class VdcHost:
             logger.debug("Unable to set vdc_send_pong.dSUID on Pong response")
 
         return response
-    
+
     def _handle_pong(self, message: Message) -> None:
         """
         Handle Pong from vdSM.
-        
+
         Pong is a response to our Ping. This confirms connectivity.
-        
+
         Args:
             message: vdc_SendPong message
         """
         logger.debug("Received Pong from vdSM")
-        
+
         if self._session:
             # Forward pong message to session for id-based correlation
             self._session.on_pong_received(message)
-    
+
     async def _handle_get_property(self, message: Message) -> Optional[Message]:
         """
         Handle property get request from vdSM.
-        
+
         Property queries can target:
         - vDC host properties (this entity)
         - vDC properties (specific vDC)
         - vdSD properties (specific device)
-        
+
         The request includes:
         - dSUID: Which entity to query
         - query: Property path to retrieve (PropertyElement tree)
-        
+
         Process:
         1. Extract dSUID from request
         2. Determine if it's host/vDC/vdSD
         3. Route to appropriate entity
         4. Build property tree response
         5. Return properties
-        
+
         Args:
             message: vdsm_RequestGetProperty message
-        
+
         Returns:
             vdc_ResponseGetProperty with property tree
         """
         get_prop = message.vdsm_request_get_property
-        
+
         # Extract target dSUID and query
-        raw_target = get_prop.dSUID if get_prop.HasField('dSUID') else self.dsuid
+        raw_target = get_prop.dSUID if get_prop.HasField("dSUID") else self.dsuid
 
         # Normalize dSUID: handle repeated scalar container or single string
         try:
-            if hasattr(raw_target, '__iter__') and not isinstance(raw_target, (str, bytes)):
+            if hasattr(raw_target, "__iter__") and not isinstance(raw_target, (str, bytes)):
                 target_dsuid = str(raw_target[0])
             else:
                 target_dsuid = str(raw_target)
         except Exception:
             target_dsuid = str(raw_target)
-        target_dsuid = target_dsuid.upper().replace('-', '').replace(':', '')
+        target_dsuid = target_dsuid.upper().replace("-", "").replace(":", "")
         query = get_prop.query  # PropertyElement tree specifying what to get
-        
+
         logger.debug(f"Property get request for dSUID {target_dsuid}")
-        
+
         # Determine target entity
         if target_dsuid == self.dsuid:
             # Query is for vDC host properties
@@ -827,30 +807,30 @@ class VdcHost:
         else:
             # Query might be for a vdSD - search in all vDCs
             properties = self._get_vdsd_properties(target_dsuid, query)
-        
+
         # Build response
         response = Message()
         response.type = VDC_RESPONSE_GET_PROPERTY
         response.message_id = message.message_id
-        
+
         resp_get_prop = response.vdc_response_get_property
         # `properties` is a list of PropertyElement messages; extend the repeated field
         resp_get_prop.properties.extend(properties)
-        
+
         logger.debug(f"Returning properties for {target_dsuid}")
-        
+
         return response
-    
+
     async def _handle_set_property(self, message: Message) -> Optional[Message]:
         """
         Handle property set request from vdSM.
-        
+
         Allows vdSM to modify writable properties of entities.
-        
+
         The request includes:
         - dSUID: Which entity to modify
         - properties: PropertyElement tree with new values
-        
+
         Process:
         1. Extract dSUID and properties
         2. Validate properties are writable
@@ -858,21 +838,21 @@ class VdcHost:
         4. Apply changes
         5. Persist if needed
         6. Return success/error
-        
+
         Args:
             message: vdsm_RequestSetProperty message
-        
+
         Returns:
             Generic response with success/error code
         """
         set_prop = message.vdsm_request_set_property
-        
+
         # Extract target dSUID and properties to set
-        target_dsuid = set_prop.dSUID if set_prop.HasField('dSUID') else self.dsuid
+        target_dsuid = set_prop.dSUID if set_prop.HasField("dSUID") else self.dsuid
         properties = set_prop.properties  # PropertyElement tree
-        
+
         logger.debug(f"Property set request for dSUID {target_dsuid}")
-        
+
         try:
             # Determine target and apply changes
             if target_dsuid == self.dsuid:
@@ -884,52 +864,52 @@ class VdcHost:
             else:
                 # Set vdSD properties
                 self._set_vdsd_properties(target_dsuid, properties)
-            
+
             # Build success response
             response = Message()
             response.type = GENERIC_RESPONSE
             response.message_id = message.message_id
-            
+
             generic_resp = response.generic_response
             generic_resp.code = genericVDC_pb2.ERR_OK
             generic_resp.description = "OK"
-            
+
             logger.debug(f"Properties set successfully for {target_dsuid}")
-            
+
             return response
-        
+
         except Exception as e:
             # Build error response
             logger.error(f"Error setting properties for {target_dsuid}: {e}")
-            
+
             response = Message()
             response.type = GENERIC_RESPONSE
             response.message_id = message.message_id
-            
+
             generic_resp = response.generic_response
             generic_resp.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
             generic_resp.description = str(e)
-            
+
             return response
-    
+
     def _get_host_properties(self, query) -> Any:
         """
         Get vDC host properties based on query.
-        
+
         Args:
             query: PropertyElement tree specifying what to retrieve
-        
+
         Returns:
             PropertyElement tree with requested properties
         """
         # Convert common properties to protobuf PropertyElement
         host_dict = self._common_props.to_dict()
-        
+
         # Add host-specific properties
-        host_dict['api_version'] = self.API_VERSION
-        host_dict['vdc_count'] = len(self._vdcs)
-        host_dict['connected'] = self._session.is_connected() if self._session else False
-        
+        host_dict["api_version"] = self.API_VERSION
+        host_dict["vdc_count"] = len(self._vdcs)
+        host_dict["connected"] = self._session.is_connected() if self._session else False
+
         # If a query is provided, filter host properties accordingly
         try:
             if query and len(query) > 0:
@@ -952,8 +932,8 @@ class VdcHost:
         """
         try:
             generic = message.generic_response
-            code = generic.code if generic.HasField('code') else None
-            desc = generic.description if generic.HasField('description') else ''
+            code = generic.code if generic.HasField("code") else None
+            desc = generic.description if generic.HasField("description") else ""
         except Exception:
             # In case of malformed message
             logger.warning(f"Received malformed GENERIC_RESPONSE message_id={getattr(message, 'message_id', None)}")
@@ -966,23 +946,25 @@ class VdcHost:
             code_name = str(code)
 
         if code is not None and code != genericVDC_pb2.ERR_OK:
-            logger.warning(f"GENERIC_RESPONSE from vdSM message_id={message.message_id} code={code_name} description='{desc}'")
+            logger.warning(
+                f"GENERIC_RESPONSE from vdSM message_id={message.message_id} code={code_name} description='{desc}'"
+            )
         else:
             logger.info(f"GENERIC_RESPONSE OK message_id={message.message_id} description='{desc}'")
 
         # No response needed
         return None
-    
+
     def _set_host_properties(self, properties) -> None:
         """
         Set vDC host properties from PropertyElement tree.
-        
+
         Args:
             properties: PropertyElement tree with new values
         """
         # Convert PropertyElement to dict
         prop_dict = PropertyTree.from_protobuf(properties)
-        
+
         # Update common properties
         try:
             self._common_props.update_from_dict(prop_dict)
@@ -992,22 +974,22 @@ class VdcHost:
                     self._common_props.set_property(k, v)
                 except Exception:
                     pass
-        
+
         # Persist changes
         host_config = self._common_props.to_dict()
         self._persistence.set_vdc_host(host_config)
-    
+
     def _get_vdsd_properties(self, dsuid: str, query) -> Any:
         """
         Get vdSD properties by searching all vDCs.
-        
+
         Args:
             dsuid: vdSD dSUID to find
             query: Property query
-        
+
         Returns:
             PropertyElement tree with properties
-        
+
         Raises:
             ValueError: If vdSD not found
         """
@@ -1015,17 +997,17 @@ class VdcHost:
         for vdc in self._vdcs.values():
             if vdc.has_vdsd(dsuid):
                 return vdc.get_vdsd_properties(dsuid, query)
-        
+
         raise ValueError(f"vdSD with dSUID {dsuid} not found")
-    
+
     def _set_vdsd_properties(self, dsuid: str, properties) -> None:
         """
         Set vdSD properties by finding the owning vDC.
-        
+
         Args:
             dsuid: vdSD dSUID
             properties: PropertyElement tree
-        
+
         Raises:
             ValueError: If vdSD not found
         """
@@ -1034,19 +1016,19 @@ class VdcHost:
             if vdc.has_vdsd(dsuid):
                 vdc.set_vdsd_properties(dsuid, properties)
                 return
-        
+
         raise ValueError(f"vdSD with dSUID {dsuid} not found")
-    
+
     async def _on_session_disconnected(self) -> None:
         """
         Callback when vdSM session ends.
-        
+
         Called when the TCP connection closes or Bye is received.
         Cleans up session state.
         """
         logger.info("vdSM session disconnected")
         self._session = None
-    
+
     def create_vdc(
         self,
         name: str,
@@ -1055,17 +1037,17 @@ class VdcHost:
         model_version: str = "1.0",
         vendor_id: Optional[str] = None,
         mac_address: Optional[str] = None,
-        **properties
-    ) -> 'Vdc':
+        **properties,
+    ) -> "Vdc":
         """
         Create a new virtual device connector (vDC).
-        
+
         A vDC represents a collection of related devices, typically
         from the same technology or manufacturer. Examples:
         - Light controller vDC for Philips Hue lights
         - Heating vDC for thermostats
         - Audio vDC for speakers
-        
+
         Args:
             name: vDC name (e.g., "Hue Bridge")
             model: vDC model identifier (human-readable)
@@ -1074,10 +1056,10 @@ class VdcHost:
             vendor_id: Vendor ID (defaults to host's vendor)
             mac_address: MAC for dSUID (defaults to host's MAC)
             **properties: Additional vDC properties
-        
+
         Returns:
             Newly created Vdc instance
-        
+
         Example:
             light_vdc = host.create_vdc(
                 name="Hue Bridge",
@@ -1089,23 +1071,23 @@ class VdcHost:
         """
         # Import here to avoid circular dependency
         from .vdc import Vdc
-        
+
         # Use host's MAC/vendor if not specified
         if mac_address is None:
             # Extract from host's generator (stored during init)
             mac_address = self._mac_address
         if vendor_id is None:
             vendor_id = self._vendor_id
-        
+
         # Generate modelUID if not provided
         # modelUID must be unique identifier for this functional model
         if model_uid is None:
             # Auto-generate from model name: "MyVDC v1.0" -> "myvdc-v1-0"
-            model_uid = model.lower().replace(' ', '-').replace('.', '-')
-        
+            model_uid = model.lower().replace(" ", "-").replace(".", "-")
+
         # Calculate enumeration (number of existing vDCs)
         enumeration = len(self._vdcs)
-        
+
         # Create vDC instance
         vdc = Vdc(
             host=self,
@@ -1117,14 +1099,14 @@ class VdcHost:
             model_uid=model_uid,
             model_version=model_version,
             enumeration=enumeration,
-            **properties
+            **properties,
         )
-        
+
         # Add to collection
         self._vdcs[vdc.dsuid] = vdc
-        
+
         logger.info(f"Created vDC: {vdc}")
-        
+
         return vdc
 
     async def _load_vdcs(self) -> None:
@@ -1144,18 +1126,18 @@ class VdcHost:
             for dsuid, cfg in vdc_configs.items():
                 try:
                     # Extract enumeration if present so DSUID generation matches
-                    enumeration = cfg.get('enumeration', 0)
+                    enumeration = cfg.get("enumeration", 0)
                     # Create Vdc instance using persisted properties
                     vdc = Vdc(
                         host=self,
                         mac_address=self._mac_address,
                         vendor_id=self._vendor_id,
                         persistence=self._persistence,
-                        model=cfg.get('model', ''),
-                        model_uid=cfg.get('model_uid', cfg.get('modelUID', '')),
-                        model_version=cfg.get('model_version', cfg.get('modelVersion', '1.0')),
+                        model=cfg.get("model", ""),
+                        model_uid=cfg.get("model_uid", cfg.get("modelUID", "")),
+                        model_version=cfg.get("model_version", cfg.get("modelVersion", "1.0")),
                         enumeration=enumeration,
-                        name=cfg.get('name', '')
+                        name=cfg.get("name", ""),
                     )
                     self._vdcs[vdc.dsuid] = vdc
                     logger.info(f"Loaded persisted vDC {vdc.dsuid}")
@@ -1163,59 +1145,59 @@ class VdcHost:
                     logger.error(f"Failed to restore vDC {dsuid}: {e}", exc_info=True)
         except Exception as e:
             logger.error(f"Error while loading persisted vDCs: {e}", exc_info=True)
-    
+
     def is_running(self) -> bool:
         """Check if host is running."""
         return self._running
-    
+
     def is_connected(self) -> bool:
         """Check if vdSM is connected."""
         return self._session is not None and self._session.is_active()
-    
-    def get_vdc(self, dsuid: str) -> Optional['Vdc']:
+
+    def get_vdc(self, dsuid: str) -> Optional["Vdc"]:
         """
         Get vDC by dSUID.
-        
+
         Args:
             dsuid: vDC dSUID
-        
+
         Returns:
             Vdc instance or None if not found
         """
         return self._vdcs.get(dsuid)
-    
-    def get_all_vdcs(self) -> List['Vdc']:
+
+    def get_all_vdcs(self) -> List["Vdc"]:
         """
         Get all vDCs managed by this host.
-        
+
         Returns:
             List of Vdc instances
         """
         return list(self._vdcs.values())
-    
+
     # ===================================================================
     # Additional Message Handlers (Scene, Output, Device Management)
     # ===================================================================
-    
-    async def _handle_call_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_call_scene(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_CALL_SCENE message.
-        
+
         This is a notification (no response required) to activate a scene on a device.
         Scenes represent predefined configurations (e.g., "Deep Off", "Preset 1").
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_CALL_SCENE protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Call scene on device/group
             vDC: Execute scene internally
             vDC → vdSM: Push property notification if values changed
-        
+
         Property Access:
             message.vdsm_notification_call_scene.dSUID - Device dSUID
             message.vdsm_notification_call_scene.scene - Scene number (0-127)
@@ -1226,77 +1208,77 @@ class VdcHost:
         try:
             # Accept multiple generated protobuf attribute names for the call-scene notification
             notification = None
-            for attr in ('vdsm_notification_call_scene', 'vdsm_send_call_scene', 'vdsm_request_call_scene'):
+            for attr in ("vdsm_notification_call_scene", "vdsm_send_call_scene", "vdsm_request_call_scene"):
                 if hasattr(message, attr):
                     notification = getattr(message, attr)
                     break
             if notification is None:
                 # Fallback to getattr default
-                notification = getattr(message, 'vdsm_send_call_scene', None)
+                notification = getattr(message, "vdsm_send_call_scene", None)
             if notification is None:
-                raise AttributeError('vdsm_notification_call_scene')
+                raise AttributeError("vdsm_notification_call_scene")
 
             raw_dsuid = notification.dSUID
             # Normalize dSUID: handle repeated scalar container or single string
             try:
-                if hasattr(raw_dsuid, '__iter__') and not isinstance(raw_dsuid, (str, bytes)):
+                if hasattr(raw_dsuid, "__iter__") and not isinstance(raw_dsuid, (str, bytes)):
                     dsuid = str(raw_dsuid[0])
                 else:
                     dsuid = str(raw_dsuid)
             except Exception:
                 dsuid = str(raw_dsuid)
             # Normalize formatting to uppercase hex without separators
-            dsuid = dsuid.upper().replace('-', '').replace(':', '')
+            dsuid = dsuid.upper().replace("-", "").replace(":", "")
 
             scene = notification.scene
-            force = notification.force if notification.HasField('force') else False
-            
+            force = notification.force if notification.HasField("force") else False
+
             logger.info(f"Call scene {scene} on device {dsuid} (force={force})")
-            
+
             # Find the device across all vDCs
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for CallScene")
                 return None
-            
+
             # Execute scene on device
             # This will apply output values, trigger callbacks, etc.
             await device.call_scene(scene, force=force)
-            
+
             # Device's internal callbacks should trigger push notifications
             # if output values changed
-            
+
         except Exception as e:
             logger.error(f"Error handling CallScene: {e}", exc_info=True)
-        
+
         # Notifications don't send responses
         return None
-    
-    async def _handle_save_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_save_scene(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SAVE_SCENE message.
-        
+
         Save current device output values to a scene number.
         This captures the "snapshot" of current state for later recall.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_SAVE_SCENE protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Save current state to scene
             vDC: Capture current output values
             vDC: Persist scene configuration
             vDC → vdSM: Push property notification (scenes updated)
-        
+
         Property Access:
             message.vdsm_notification_save_scene.dSUID - Device dSUID
             message.vdsm_notification_save_scene.scene - Scene number to save to
@@ -1307,9 +1289,9 @@ class VdcHost:
             notification = message.vdsm_notification_save_scene
             dsuid = notification.dSUID
             scene = notification.scene
-            
+
             logger.info(f"Save scene {scene} for device {dsuid}")
-            
+
             # Find device (tolerant matching): try direct lookup, then compare normalized keys
             device = None
             for vdc in self._vdcs.values():
@@ -1321,56 +1303,56 @@ class VdcHost:
             if device is None:
                 # Normalize for comparison: remove separators and uppercase
                 try:
-                    norm = dsuid.replace('-', '').replace(':', '').upper()
+                    norm = dsuid.replace("-", "").replace(":", "").upper()
                 except Exception:
-                    norm = str(dsuid).replace('-', '').replace(':', '').upper()
+                    norm = str(dsuid).replace("-", "").replace(":", "").upper()
 
                 for vdc in self._vdcs.values():
                     for key, dev in vdc._vdsds.items():
                         try:
-                            key_norm = key.replace('-', '').replace(':', '').upper()
+                            key_norm = key.replace("-", "").replace(":", "").upper()
                         except Exception:
-                            key_norm = str(key).replace('-', '').replace(':', '').upper()
+                            key_norm = str(key).replace("-", "").replace(":", "").upper()
                         if key_norm == norm:
                             device = dev
                             break
                     if device:
                         break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for SaveScene")
                 return None
-            
+
             # Save current state as scene
             await device.save_scene(scene)
-            
+
             # Persistence is automatically triggered in device.save_scene()
             # Push notification should be sent by device callbacks
-            
+
         except Exception as e:
             logger.error(f"Error handling SaveScene: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_undo_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_undo_scene(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_UNDO_SCENE message.
-        
+
         Undo the last scene call and restore previous state.
         Useful for "oops, didn't mean to do that" situations.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_UNDO_SCENE protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Undo last scene
             vDC: Restore previous output values from undo stack
             vDC → vdSM: Push property notification (values changed)
-        
+
         Property Access:
             message.vdsm_notification_undo_scene.dSUID - Device dSUID
             message.vdsm_notification_undo_scene.group - Group filter (optional)
@@ -1379,53 +1361,49 @@ class VdcHost:
         try:
             notification = message.vdsm_notification_undo_scene
             dsuid = notification.dSUID
-            
+
             logger.info(f"Undo scene for device {dsuid}")
-            
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for UndoScene")
                 return None
-            
+
             # Undo last scene
             await device.undo_scene()
-            
+
             # Device callbacks will send push notifications
-            
+
         except Exception as e:
             logger.error(f"Error handling UndoScene: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_set_output_channel_value(
-        self, 
-        message: Message, 
-        session: 'VdSMSession'
-    ) -> Optional[Message]:
+
+    async def _handle_set_output_channel_value(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE message.
-        
+
         Set a specific output channel value (brightness, hue, etc.).
         This is for direct control outside of scenes.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_SET_OUTPUT_CHANNEL_VALUE protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Set channel X to value Y
             vDC: Update channel value (with transitions if specified)
             vDC → vdSM: Push property notification (channel value changed)
-        
+
         Property Access:
             message.vdsm_notification_set_output_channel_value.dSUID - Device dSUID
             message.vdsm_notification_set_output_channel_value.channel - Channel type (0=brightness, etc.)
@@ -1437,74 +1415,71 @@ class VdcHost:
         try:
             notification = message.vdsm_notification_set_output_channel_value
             dsuid = notification.dSUID
-            
+
             # Support both old 'channel' and new 'channelId'
-            if notification.HasField('channelId'):
+            if notification.HasField("channelId"):
                 channel_id = notification.channelId
             else:
                 channel_id = notification.channel
-            
+
             value = notification.value
-            apply_now = notification.apply_now if notification.HasField('apply_now') else True
-            transition_time = notification.transition_time if notification.HasField('transition_time') else 0
-            
-            logger.info(f"Set channel {channel_id} to {value} on device {dsuid} "
-                       f"(apply={apply_now}, transition={transition_time}ms)")
-            
+            apply_now = notification.apply_now if notification.HasField("apply_now") else True
+            transition_time = notification.transition_time if notification.HasField("transition_time") else 0
+
+            logger.info(
+                f"Set channel {channel_id} to {value} on device {dsuid} "
+                f"(apply={apply_now}, transition={transition_time}ms)"
+            )
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for SetOutputChannelValue")
                 return None
-            
+
             # Get output container
             output = device.get_output()
             if output is None:
                 logger.warning(f"Device {dsuid} has no output channels")
                 return None
-            
+
             # Set channel value
-            output.set_channel_value(
-                channel_id, 
-                value,
-                apply_now=apply_now,
-                transition_time_ms=transition_time
-            )
-            
+            output.set_channel_value(channel_id, value, apply_now=apply_now, transition_time_ms=transition_time)
+
             # Output callbacks will trigger push notifications
-            
+
         except Exception as e:
             logger.error(f"Error handling SetOutputChannelValue: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_dim_channel(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_dim_channel(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_DIM_CHANNEL message.
-        
+
         Start/stop continuous dimming (up/down) of a channel.
         Typically triggered by holding a button.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_DIM_CHANNEL protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Start dimming channel up/down
             vDC: Begin continuous value adjustment
             vDC → vdSM: Push property notifications as value changes
-            
+
             vdSM → vDC: Stop dimming (mode=stop)
             vDC: Halt dimming, maintain current value
-        
+
         Property Access:
             message.vdsm_notification_dim_channel.dSUID - Device dSUID
             message.vdsm_notification_dim_channel.channel - Channel to dim
@@ -1517,68 +1492,68 @@ class VdcHost:
         try:
             notification = message.vdsm_notification_dim_channel
             dsuid = notification.dSUID
-            
+
             # Support both old and new channel identifiers
-            if notification.HasField('channelId'):
+            if notification.HasField("channelId"):
                 channel_id = notification.channelId
             else:
                 channel_id = notification.channel
-            
+
             mode = notification.mode  # 0=stop, 1=down, 2=up
-            
+
             logger.info(f"Dim channel {channel_id} mode {mode} on device {dsuid}")
-            
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for DimChannel")
                 return None
-            
+
             # Get output container
             output = device.get_output()
             if output is None:
                 logger.warning(f"Device {dsuid} has no output channels")
                 return None
-            
+
             # Execute dimming operation
             if mode == 0:  # Stop dimming
                 output.stop_dimming(channel_id)
             elif mode == 1:  # Dim down
-                output.start_dimming(channel_id, direction='down')
+                output.start_dimming(channel_id, direction="down")
             elif mode == 2:  # Dim up
-                output.start_dimming(channel_id, direction='up')
+                output.start_dimming(channel_id, direction="up")
             else:
                 logger.warning(f"Unknown dim mode: {mode}")
-            
+
         except Exception as e:
             logger.error(f"Error handling DimChannel: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_identify(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_identify(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_IDENTIFY message.
-        
+
         Request device to identify itself (blink, beep, etc.).
         Useful for finding physical devices during commissioning.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_IDENTIFY protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Identify device
             vDC: Trigger identification (blink LED, beep, etc.)
             vDC: Execute for specified duration
-        
+
         Property Access:
             message.vdsm_notification_identify.dSUID - Device dSUID
             message.vdsm_notification_identify.duration - Identification duration in seconds (optional)
@@ -1586,60 +1561,60 @@ class VdcHost:
         try:
             notification = message.vdsm_notification_identify
             dsuid = notification.dSUID
-            duration = notification.duration if notification.HasField('duration') else 3.0
-            
+            duration = notification.duration if notification.HasField("duration") else 3.0
+
             logger.info(f"Identify device {dsuid} for {duration}s")
-            
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for Identify")
                 return None
-            
+
             # Trigger identification
             # Device implementation should handle the actual identification
             # (blink LED, flash output, play sound, etc.)
             await device.identify(duration=duration)
-            
+
         except Exception as e:
             logger.error(f"Error handling Identify: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_remove(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_remove(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_SEND_REMOVE message.
-        
+
         Request to remove a device from the system.
         vDC should disconnect/unpair the device and send Vanish notification.
-        
+
         Args:
             message: Incoming VDSM_SEND_REMOVE protobuf
             session: Active vdSM session
-        
+
         Returns:
             Message with VDC_SEND_REMOVE_RESULT (success/error)
-        
+
         Message Flow:
             vdSM → vDC: Remove device
             vDC: Attempt to disconnect/unpair device
             vDC → vdSM: RemoveResult (success/failure)
             vDC → vdSM: VanishNotification (if successful)
-        
+
         Property Access:
             message.vdsm_send_remove.dSUID - Device dSUID to remove
         """
         try:
             request = message.vdsm_send_remove
             dsuid = request.dSUID
-            
+
             logger.info(f"Remove device {dsuid}")
-            
+
             # Find device and owning vDC
             device = None
             owning_vdc = None
@@ -1648,7 +1623,7 @@ class VdcHost:
                     device = vdc.get_vdsd(dsuid)
                     owning_vdc = vdc
                     break
-            
+
             if device is None or owning_vdc is None:
                 # Device not found - send error
                 response = Message()
@@ -1657,26 +1632,26 @@ class VdcHost:
                 response.vdc_send_remove_result.code = genericVDC_pb2.ERROR_NOT_FOUND
                 response.vdc_send_remove_result.description = f"Device {dsuid} not found"
                 return response
-            
+
             # Remove device from vDC
             owning_vdc.remove_vdsd(dsuid)
-            
+
             # Send success response
             response = Message()
             response.message_id = message.message_id
             response.vdc_send_remove_result.SetInParent()
             response.vdc_send_remove_result.code = genericVDC_pb2.ERROR_OK
-            
+
             # Send vanish notification (device no longer exists)
             await self._send_vanish_notification(dsuid)
-            
+
             logger.info(f"Device {dsuid} removed successfully")
-            
+
             return response
-            
+
         except Exception as e:
             logger.error(f"Error handling Remove: {e}", exc_info=True)
-            
+
             # Send error response
             response = Message()
             response.message_id = message.message_id
@@ -1684,50 +1659,50 @@ class VdcHost:
             response.vdc_send_remove_result.code = genericVDC_pb2.ERROR_INTERNAL
             response.vdc_send_remove_result.description = str(e)
             return response
-    
-    async def _handle_generic_request(self, message: Message, session: 'VdSMSession') -> Message:
+
+    async def _handle_generic_request(self, message: Message, session: "VdSMSession") -> Message:
         """
         Handle VDSM_REQUEST_GENERIC_REQUEST message.
-        
+
         Generic requests allow calling custom actions or methods on devices.
         This is the primary way to invoke actions defined via the action system.
-        
+
         Args:
             message: Incoming VDSM_REQUEST_GENERIC_REQUEST protobuf
             session: Active vdSM session
-        
+
         Returns:
             Message with VDC_RESPONSE_GENERIC_RESPONSE (result or error)
-        
+
         Message Flow:
             vdSM → vDC: GenericRequest(dSUID, method, params)
             vDC: Find device and action
             vDC: Execute action with params
             vDC → vdSM: GenericResponse(result or error)
-        
+
         Property Access:
             message.vdsm_request_generic_request.dSUID - Device dSUID (optional, host if empty)
             message.vdsm_request_generic_request.method_name - Method/action name
             message.vdsm_request_generic_request.params - PropertyElement tree with parameters
-        
+
         Standard Actions:
             - Custom actions defined via ActionManager
             - Standard operations like reset, factory_reset, etc.
         """
         try:
             request = message.vdsm_request_generic_request
-            dsuid = request.dSUID if request.HasField('dSUID') else None
+            dsuid = request.dSUID if request.HasField("dSUID") else None
             # protobuf may name the field 'methodname' (no underscore)
-            if hasattr(request, 'methodname'):
+            if hasattr(request, "methodname"):
                 method_name = request.methodname
             else:
-                method_name = getattr(request, 'method_name', '')
-            params = PropertyTree.from_protobuf(request.params) if request.HasField('params') else {}
-            
+                method_name = getattr(request, "method_name", "")
+            params = PropertyTree.from_protobuf(request.params) if request.HasField("params") else {}
+
             logger.info(f"Generic request: {method_name} on {dsuid or 'host'} with params {params}")
-            
+
             result = None
-            
+
             # If dSUID is specified, find device
             if dsuid:
                 device = None
@@ -1735,7 +1710,7 @@ class VdcHost:
                     if vdc.has_vdsd(dsuid):
                         device = vdc.get_vdsd(dsuid)
                         break
-                
+
                 if device is None:
                     # Device not found
                     response = Message()
@@ -1744,7 +1719,7 @@ class VdcHost:
                     response.generic_response.code = genericVDC_pb2.ERR_NOT_FOUND
                     response.generic_response.description = f"Device {dsuid} not found"
                     return response
-                
+
                 # Try to call action on device
                 action_manager = device.get_action_manager()
                 if action_manager and action_manager.has_action(method_name):
@@ -1757,7 +1732,7 @@ class VdcHost:
                     response.generic_response.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
                     response.generic_response.description = f"Action '{method_name}' not found on device"
                     return response
-            
+
             else:
                 # Host-level generic request
                 # Could implement host-level actions here
@@ -1767,13 +1742,13 @@ class VdcHost:
                 response.generic_response.code = genericVDC_pb2.ERR_NOT_IMPLEMENTED
                 response.generic_response.description = "Host-level actions not implemented"
                 return response
-            
+
             # Send successful response with result
             response = Message()
             response.message_id = message.message_id
             response.generic_response.SetInParent()
             response.generic_response.code = genericVDC_pb2.ERR_OK
-            
+
             # Convert result to PropertyElement if present
             if result is not None:
                 # GenericResponse has no 'result' field in this proto; include result in generic_response.description
@@ -1781,77 +1756,81 @@ class VdcHost:
                     response.generic_response.description = str(result)
                 except Exception:
                     pass
-            
+
             return response
-            
+
         except Exception as e:
             logger.error(f"Error handling GenericRequest: {e}", exc_info=True)
-            
+
             # Send error response
             response = Message()
             response.message_id = message.message_id
             response.generic_response.SetInParent()
-            response.generic_response.code = genericVDC_pb2.ERR_INTERNAL if hasattr(genericVDC_pb2, 'ERR_INTERNAL') else genericVDC_pb2.ERR_NOT_IMPLEMENTED
+            response.generic_response.code = (
+                genericVDC_pb2.ERR_INTERNAL
+                if hasattr(genericVDC_pb2, "ERR_INTERNAL")
+                else genericVDC_pb2.ERR_NOT_IMPLEMENTED
+            )
             response.generic_response.description = str(e)
             return response
-    
-    async def _handle_set_local_prio(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_set_local_prio(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SET_LOCAL_PRIO message.
-        
+
         Set local priority for a device/group/zone.
         Local priority determines which device takes precedence
         when multiple devices control the same resource.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_SET_LOCAL_PRIO protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
         """
         try:
             notification = message.vdsm_notification_set_local_prio
             dsuid = notification.dSUID
-            scene = notification.scene if notification.HasField('scene') else None
-            
+            scene = notification.scene if notification.HasField("scene") else None
+
             logger.info(f"Set local priority on device {dsuid} for scene {scene}")
-            
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for SetLocalPrio")
                 return None
-            
+
             # Set local priority
             # This affects which device's scene takes precedence
             device.set_local_priority(scene)
-            
+
         except Exception as e:
             logger.error(f"Error handling SetLocalPrio: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_call_min_scene(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_call_min_scene(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_CALL_MIN_SCENE message.
-        
+
         Call a "minimum scene" - activates scene only if current
         values are below the scene's values. Useful for ensuring
         minimum light levels without overriding higher values.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_CALL_MIN_SCENE protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Message Flow:
             vdSM → vDC: Call min scene on device
             vDC: Compare current values with scene values
@@ -1862,43 +1841,43 @@ class VdcHost:
             notification = message.vdsm_notification_call_min_scene
             dsuid = notification.dSUID
             scene = notification.scene
-            
+
             logger.info(f"Call min scene {scene} on device {dsuid}")
-            
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 logger.warning(f"Device {dsuid} not found for CallMinScene")
                 return None
-            
+
             # Call scene with min mode
-            await device.call_scene(scene, mode='min')
-            
+            await device.call_scene(scene, mode="min")
+
         except Exception as e:
             logger.error(f"Error handling CallMinScene: {e}", exc_info=True)
-        
+
         return None
-    
-    async def _handle_set_control_value(self, message: Message, session: 'VdSMSession') -> Optional[Message]:
+
+    async def _handle_set_control_value(self, message: Message, session: "VdSMSession") -> Optional[Message]:
         """
         Handle VDSM_NOTIFICATION_SET_CONTROL_VALUE message.
-        
+
         Set a control value (e.g., valve position, motor position).
         Control values are distinct from output channels - they
         represent actuator positions rather than light/color values.
-        
+
         Args:
             message: Incoming VDSM_NOTIFICATION_SET_CONTROL_VALUE protobuf
             session: Active vdSM session
-        
+
         Returns:
             None (notifications don't send responses)
-        
+
         Property Access:
             message.vdsm_notification_set_control_value.dSUID - Device dSUID
             message.vdsm_notification_set_control_value.name - Control name
@@ -1906,38 +1885,38 @@ class VdcHost:
         """
         try:
             # protobuf generated name may be 'vdsm_notification_set_control_value' or 'vdsm_send_set_control_value'
-            if hasattr(message, 'vdsm_notification_set_control_value'):
+            if hasattr(message, "vdsm_notification_set_control_value"):
                 notification = message.vdsm_notification_set_control_value
-            elif hasattr(message, 'vdsm_send_set_control_value'):
+            elif hasattr(message, "vdsm_send_set_control_value"):
                 notification = message.vdsm_send_set_control_value
             else:
                 # Try alternate naming used in older generated protos
-                notification = getattr(message, 'vdsm_send_set_control_value', None)
+                notification = getattr(message, "vdsm_send_set_control_value", None)
                 if notification is None:
-                    raise AttributeError('vdsm_notification_set_control_value')
+                    raise AttributeError("vdsm_notification_set_control_value")
             # Normalize dSUID: handle repeated scalar container or single string
             raw_dsuid = notification.dSUID
             try:
-                if hasattr(raw_dsuid, '__iter__') and not isinstance(raw_dsuid, (str, bytes)):
+                if hasattr(raw_dsuid, "__iter__") and not isinstance(raw_dsuid, (str, bytes)):
                     dsuid = str(raw_dsuid[0])
                 else:
                     dsuid = str(raw_dsuid)
             except Exception:
                 dsuid = str(raw_dsuid)
-            dsuid = dsuid.upper().replace('-', '').replace(':', '')
+            dsuid = dsuid.upper().replace("-", "").replace(":", "")
 
             control_name = notification.name
             value = notification.value
-            
+
             logger.info(f"Set control '{control_name}' to {value} on device {dsuid}")
-            
+
             # Find device
             device = None
             for vdc in self._vdcs.values():
                 if vdc.has_vdsd(dsuid):
                     device = vdc.get_vdsd(dsuid)
                     break
-            
+
             if device is None:
                 # Device not currently loaded in memory. Persist the control
                 # value into YAML persistence so the vdSD's property tree
@@ -1949,10 +1928,7 @@ class VdcHost:
                     existing = self._persistence.get_vdsd(dsuid)
                     if existing is None:
                         # Create minimal vdSD entry with control value
-                        config = {
-                            'dSUID': dsuid,
-                            'controlValues': {control_name: float(value)}
-                        }
+                        config = {"dSUID": dsuid, "controlValues": {control_name: float(value)}}
                         self._persistence.set_vdsd(dsuid, config)
                         logger.info(f"Persisted new vdSD {dsuid} with control {control_name}={value}")
                     else:
@@ -1964,32 +1940,32 @@ class VdcHost:
 
                 logger.info(f"Device [{dsuid}] not loaded; persisted control {control_name}={value}")
                 return None
-            
+
             # Set control value
             # Device should handle this via its control system
             device.set_control_value(control_name, value)
-            
+
         except Exception as e:
             logger.error(f"Error handling SetControlValue: {e}", exc_info=True)
-        
+
         return None
-    
+
     # ===================================================================
     # Push Notification Helpers
     # ===================================================================
-    
+
     async def _send_vanish_notification(self, dsuid: str) -> None:
         """
         Send VDC_NOTIFICATION_VANISH to vdSM.
-        
+
         Notifies vdSM that a device has been removed and is no longer available.
-        
+
         Args:
             dsuid: dSUID of vanished device
         """
         if not self._session or not self._session.is_active():
             return
-        
+
         notification = Message()
         # Use last-received id + 1 only when we've previously received an id
         try:
@@ -2000,43 +1976,39 @@ class VdcHost:
             pass
         notification.vdc_notification_vanish.SetInParent()
         notification.vdc_notification_vanish.dSUID = dsuid
-        
+
         await self._session.send_message(notification)
         logger.debug(f"Sent vanish notification for device {dsuid}")
-    
-    async def send_push_notification(
-        self, 
-        dsuid: str, 
-        properties: Optional[dict] = None
-    ) -> None:
+
+    async def send_push_notification(self, dsuid: str, properties: Optional[dict] = None) -> None:
         """
         Send VDC_SEND_PUSH_PROPERTY to vdSM.
-        
+
         Notifies vdSM that device properties have changed.
         This is the primary mechanism for pushing state updates to vdSM.
-        
+
         Args:
             dsuid: Device dSUID that changed
             properties: Optional property tree (if None, vdSM will query)
-        
+
         Message Flow:
             vDC → vdSM: PushProperty(dSUID, properties)
             vdSM: Update internal state
             vdSM: May send GetProperty for full refresh
-        
+
         Usage:
             # Push specific properties
             await host.send_push_notification(
                 device.dsuid,
                 {'channelValues': [{'channelId': 0, 'value': 75}]}
             )
-            
+
             # Push notification without properties (vdSM will query)
             await host.send_push_notification(device.dsuid)
         """
         if not self._session or not self._session.is_active():
             return
-        
+
         notification = Message()
         # Use last-received id + 1 only when we've previously received an id
         try:
@@ -2047,13 +2019,11 @@ class VdcHost:
             pass
         notification.vdc_send_push_property.SetInParent()
         notification.vdc_send_push_property.dSUID = dsuid
-        
+
         # Include properties if provided
         if properties:
             # PropertyTree.to_protobuf() returns a list of PropertyElement messages
-            notification.vdc_send_push_property.properties.extend(
-                PropertyTree.to_protobuf(properties)
-            )
-        
+            notification.vdc_send_push_property.properties.extend(PropertyTree.to_protobuf(properties))
+
         await self._session.send_message(notification)
         logger.debug(f"Sent push notification for device {dsuid}")

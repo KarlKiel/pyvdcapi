@@ -6,18 +6,20 @@ import asyncio
 import logging
 from pathlib import Path
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyvdcapi.network.service_announcement import ServiceAnnouncer
+from pyvdcapi.network.service_announcement import ServiceAnnouncer  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
+
 
 async def main():
     announcer = ServiceAnnouncer(
         port=8444,  # Example port
         dsuid="test-dsuid-1234",  # Example dSUID
         host_name="test-vdc-host",  # Example host name
-        use_avahi=False  # Use zeroconf (cross-platform)
+        use_avahi=False,  # Use zeroconf (cross-platform)
     )
     print("Starting vDC host service announcement...")
     started = await announcer.start()
@@ -32,6 +34,7 @@ async def main():
         print("✗ Failed to start service announcement.")
     await announcer.stop()
     print("✓ Service announcement stopped.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

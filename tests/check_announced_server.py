@@ -1,9 +1,10 @@
 """
 Check what server name is actually being announced on the network
 """
-import asyncio
+
 from zeroconf import Zeroconf, ServiceBrowser, ServiceListener
 import time
+
 
 class VdcListener(ServiceListener):
     def add_service(self, zc, type_, name):
@@ -11,15 +12,15 @@ class VdcListener(ServiceListener):
             info = zc.get_service_info(type_, name)
             if info:
                 print(f"\n{'='*70}")
-                print(f"FOUND YOUR VDC HOST!")
+                print("FOUND YOUR VDC HOST!")
                 print(f"{'='*70}")
                 print(f"Name:    {name}")
                 print(f"Server:  {info.server} ← THIS MUST BE LOWERCASE!")
                 print(f"Port:    {info.port}")
-                addrs = ['.'.join(str(b) for b in addr) for addr in info.addresses]
+                addrs = [".".join(str(b) for b in addr) for addr in info.addresses]
                 print(f"IPs:     {', '.join(addrs)}")
                 print(f"{'='*70}\n")
-                
+
                 if info.server != info.server.lower():
                     print(" WARNING: Server name is NOT lowercase!")
                     print(f" Expected: {info.server.lower()}")
@@ -27,12 +28,13 @@ class VdcListener(ServiceListener):
                 else:
                     print(" ✓ Server name IS lowercase - Good for Avahi!")
                 print()
-    
+
     def remove_service(self, zc, type_, name):
         pass
-    
+
     def update_service(self, zc, type_, name):
         pass
+
 
 print("\nListening for your vDC host announcement...")
 print("Make sure your vDC host is running!")

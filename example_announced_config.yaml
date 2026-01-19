@@ -40,7 +40,7 @@ vdsds:
     zoneID: 60586
     vdc_dSUID: 000000017F9202F411B8B5822402000000
     controlValues:
-      TemperatureZone: 21.600000000000023
+      TemperatureZone: 23.0
       WindDirection: 720.0
       HumidityOutside: 99.0
       TemperatureOutside: 1.700000000000017

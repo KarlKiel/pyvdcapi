@@ -2,16 +2,19 @@ import asyncio
 import struct
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from pyvdcapi.entities.vdc_host import VdcHost
-from pyvdcapi.network import genericVDC_pb2 as pb
 
-MESSAGE_LENGTH_FORMAT = '!H'
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from pyvdcapi.entities.vdc_host import VdcHost  # noqa: E402
+from pyvdcapi.network import genericVDC_pb2 as pb  # noqa: E402
+
+MESSAGE_LENGTH_FORMAT = "!H"
+
 
 async def send_message(writer, message):
     data = message.SerializeToString()
     writer.write(struct.pack(MESSAGE_LENGTH_FORMAT, len(data)) + data)
     await writer.drain()
+
 
 async def read_message(reader):
     length_bytes = await reader.readexactly(2)
@@ -20,6 +23,7 @@ async def read_message(reader):
     msg = pb.Message()
     msg.ParseFromString(data)
     return msg
+
 
 async def run_test():
     # Start host
@@ -31,7 +35,7 @@ async def run_test():
     print("Created vDC:", vdc.dsuid)
 
     # Connect as vdSM client
-    reader, writer = await asyncio.open_connection('127.0.0.1', host.port)
+    reader, writer = await asyncio.open_connection("127.0.0.1", host.port)
 
     # Send Hello
     hello = pb.Message()
@@ -53,12 +57,12 @@ async def run_test():
 
     # add query elements for 'name' and 'model'
     q_name = pb.PropertyElement()
-    q_name.name = 'name'
-    q_name.elements.add().name = ''  # terminate
+    q_name.name = "name"
+    q_name.elements.add().name = ""  # terminate
 
     q_model = pb.PropertyElement()
-    q_model.name = 'model'
-    q_model.elements.add().name = ''
+    q_model.name = "model"
+    q_model.elements.add().name = ""
 
     getp.vdsm_request_get_property.query.extend([q_name, q_model])
 
@@ -73,5 +77,6 @@ async def run_test():
     await writer.wait_closed()
     await host.stop()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(run_test())

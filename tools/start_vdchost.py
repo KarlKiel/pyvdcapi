@@ -1,6 +1,7 @@
 import asyncio
 from pyvdcapi.entities.vdc_host import VdcHost
 
+
 async def main():
     host = VdcHost(name="Test Host", announce_service=False)
     await host.start()
@@ -12,5 +13,6 @@ async def main():
     except asyncio.CancelledError:
         pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())

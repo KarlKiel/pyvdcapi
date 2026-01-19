@@ -11,7 +11,7 @@ from typing import Dict, Any
 class DSScene(IntEnum):
     """
     Standard digitalSTROM scene numbers.
-    
+
     Based on digitalSTROM specification:
     - 0-4: Area scenes (1-4)
     - 5-12: Named scenes
@@ -20,13 +20,14 @@ class DSScene(IntEnum):
     - 64-126: Reserved
     - 127: Stop/LocalOff
     """
+
     # Area scenes (Area 1-4, plus Global Off)
     AREA_1_OFF = 0
     AREA_2_OFF = 1
     AREA_3_OFF = 2
     AREA_4_OFF = 3
     GLOBAL_OFF = 4  # Also known as Area Global Off
-    
+
     # Standard named scenes
     DEEP_OFF = 5  # Deep off (power saving mode)
     STANDBY = 6  # Standby
@@ -36,32 +37,32 @@ class DSScene(IntEnum):
     SLEEPING = 10  # Sleeping
     ALARM = 11  # Alarm
     FIRE = 12  # Fire alarm / panic
-    
+
     # Special control scenes
     STOP = 13  # Stop dimming/movement
     MIN = 14  # Minimum value
     MAX = 15  # Maximum value
     INC = 16  # Increment
     DEC = 17  # Decrement
-    
+
     AREA_1_ON = 18  # Area 1 stepping on
     AREA_2_ON = 19  # Area 2 stepping on
     AREA_3_ON = 20  # Area 3 stepping on
     AREA_4_ON = 21  # Area 4 stepping on
-    
+
     AREA_1_INC = 22  # Area 1 increment
     AREA_2_INC = 23  # Area 2 increment
     AREA_3_INC = 24  # Area 3 increment
     AREA_4_INC = 25  # Area 4 increment
-    
+
     AREA_1_DEC = 26  # Area 1 decrement
     AREA_2_DEC = 27  # Area 2 decrement
     AREA_3_DEC = 28  # Area 3 decrement
     AREA_4_DEC = 29  # Area 4 decrement
-    
+
     AUTO_STANDBY = 30  # Auto standby
     SUN_PROTECTION = 31  # Sun protection
-    
+
     # User-defined presets (32-63)
     PRESET_0 = 32
     PRESET_1 = 33
@@ -95,7 +96,7 @@ class DSScene(IntEnum):
     PRESET_29 = 61
     PRESET_30 = 62
     PRESET_31 = 63
-    
+
     # Special scenes
     LOCAL_OFF = 127  # Local off / stop
 
@@ -103,9 +104,10 @@ class DSScene(IntEnum):
 class DSGroup(IntEnum):
     """
     Standard digitalSTROM group (color) numbers.
-    
+
     Groups represent functional classes of devices.
     """
+
     YELLOW = 1  # Light
     GRAY = 2  # Blinds/Shades
     BLUE = 3  # Heating
@@ -121,13 +123,14 @@ class DSGroup(IntEnum):
 class DSChannelType(IntEnum):
     """
     Standard digitalSTROM channel types.
-    
+
     Based on vDC API specification and digitalSTROM standards.
     Channel types 0-191 are reserved for digitalSTROM standards.
     """
+
     # Default channel
     DEFAULT = 0  # Default channel (usually brightness for lights)
-    
+
     # Standard light channels (1-10)
     BRIGHTNESS = 1  # Brightness (0-100%)
     HUE = 2  # Hue (0-360°)
@@ -135,14 +138,14 @@ class DSChannelType(IntEnum):
     COLOR_TEMP = 4  # Color temperature (in mired, 100-1000)
     CIE_X = 5  # CIE x coordinate (0-10000, scaled to 0.0-1.0)
     CIE_Y = 6  # CIE y coordinate (0-10000, scaled to 0.0-1.0)
-    
+
     # Blind/shade channels (11-20)
     SHADE_POSITION_OUTSIDE = 11  # Shade position outside/blinds (0-100%)
     SHADE_POSITION_INDOOR = 12  # Shade position indoor/curtains (0-100%)
     SHADE_OPENING_ANGLE_OUTSIDE = 13  # Shade opening angle outside/blinds (0-100%)
     SHADE_OPENING_ANGLE_INDOOR = 14  # Shade opening angle indoor/curtains (0-100%)
     TRANSPARENCY = 15  # Transparency, e.g. smart glass (0-100%)
-    
+
     # HVAC/Climate channels (21-40)
     HEATING_POWER = 21  # Heating power (0-100%)
     HEATING_VALUE = 22  # Heating valve position (0-100%)
@@ -154,25 +157,26 @@ class DSChannelType(IntEnum):
     AIR_LOUVER_POSITION = 28  # Ventilation louver position (0-100%)
     AIR_LOUVER_AUTO = 29  # Ventilation swing mode (0=notActive, 1=active)
     AIR_FLOW_AUTO = 30  # Ventilation auto intensity (0=notActive, 1=active)
-    
+
     # Audio channels (41-50)
     AUDIO_VOLUME = 41  # Audio volume/loudness (0-100%)
     AUDIO_BASS = 42  # Bass level
     AUDIO_TREBLE = 43  # Treble level
     AUDIO_BALANCE = 44  # Balance (L-R)
-    
+
     # Extended channels (51-100)
     WATER_TEMPERATURE = 51  # Water temperature (0-150°C)
     WATER_FLOW = 52  # Water flow
     POWER_STATE = 53  # Power state (0=powerOff, 1=powerOn, 2=forcedOff, 3=standby)
     WIND_SPEED_RATE = 54  # Wind speed rate (0-100%)
     POWER_LEVEL = 55  # Power level (0-100%)
-    
+
     # Device-specific channels start at 192
 
 
 class DSSceneEffect(IntEnum):
     """Scene effect types when calling a scene."""
+
     NONE = 0  # No effect, immediate transition
     SMOOTH = 1  # Smooth normal transition
     SLOW = 2  # Slow transition
@@ -182,6 +186,7 @@ class DSSceneEffect(IntEnum):
 
 class DSOutputFunction(IntEnum):
     """Output function types."""
+
     SWITCH = 0  # On/off only
     DIMMER = 1  # Dimmer (brightness)
     POSITIONAL = 2  # Positional (valves, blinds)
@@ -193,6 +198,7 @@ class DSOutputFunction(IntEnum):
 
 class DSOutputUsage(IntEnum):
     """Output usage types (beyond device color)."""
+
     UNDEFINED = 0  # Generic usage or unknown
     ROOM = 1  # Room usage
     OUTDOORS = 2  # Outdoor usage
@@ -201,6 +207,7 @@ class DSOutputUsage(IntEnum):
 
 class DSOutputMode(IntEnum):
     """Output mode settings."""
+
     DISABLED = 0  # Disabled, inactive
     BINARY = 1  # Binary (on/off)
     GRADUAL = 2  # Gradual (dimming/positioning)
@@ -209,6 +216,7 @@ class DSOutputMode(IntEnum):
 
 class DSHeatingSystemCapability(IntEnum):
     """Climate control heating system capability."""
+
     HEATING_ONLY = 1  # Heating only (heatingLevel 0..100 -> output 0..100)
     COOLING_ONLY = 2  # Cooling only (heatingLevel 0..-100 -> output 0..100)
     HEATING_AND_COOLING = 3  # Heating and cooling (heatingLevel -100..0..100)
@@ -216,6 +224,7 @@ class DSHeatingSystemCapability(IntEnum):
 
 class DSHeatingSystemType(IntEnum):
     """Climate control heating system type."""
+
     UNDEFINED = 0  # Undefined
     FLOOR_HEATING = 1  # Floor heating (valve)
     RADIATOR = 2  # Radiator (valve)
@@ -227,6 +236,7 @@ class DSHeatingSystemType(IntEnum):
 
 class DSInputType(IntEnum):
     """Input types for buttons and binary inputs."""
+
     BUTTON_SINGLE = 0  # Single press button
     BUTTON_DOUBLE = 1  # Double press capable
     BUTTON_LONG = 2  # Long press capable
@@ -237,6 +247,7 @@ class DSInputType(IntEnum):
 
 class DSButtonType(IntEnum):
     """Physical button types."""
+
     UNDEFINED = 0  # Undefined
     SINGLE_PUSHBUTTON = 1  # Single pushbutton
     TWO_WAY_PUSHBUTTON = 2  # 2-way pushbutton
@@ -248,6 +259,7 @@ class DSButtonType(IntEnum):
 
 class DSButtonClickType(IntEnum):
     """Button click types."""
+
     TIP_1X = 0  # Single tip
     TIP_2X = 1  # Double tip
     TIP_3X = 2  # Triple tip
@@ -268,6 +280,7 @@ class DSButtonClickType(IntEnum):
 
 class DSButtonActionMode(IntEnum):
     """Button action modes."""
+
     NORMAL = 0  # Normal action
     FORCE = 1  # Force action
     UNDO = 2  # Undo action
@@ -275,6 +288,7 @@ class DSButtonActionMode(IntEnum):
 
 class DSSensorType(IntEnum):
     """Sensor physical unit types."""
+
     NONE = 0  # None
     TEMPERATURE = 1  # Temperature in °C
     HUMIDITY = 2  # Relative humidity in %
@@ -308,6 +322,7 @@ class DSSensorType(IntEnum):
 
 class DSSensorUsage(IntEnum):
     """Sensor usage field types."""
+
     UNDEFINED = 0  # Undefined (generic usage or unknown)
     ROOM = 1  # Room
     OUTDOOR = 2  # Outdoor
@@ -319,6 +334,7 @@ class DSSensorUsage(IntEnum):
 
 class DSBinaryInputUsage(IntEnum):
     """Binary input usage field types."""
+
     UNDEFINED = 0  # Undefined (generic usage or unknown)
     ROOM_CLIMATE = 1  # Room climate
     OUTDOOR_CLIMATE = 2  # Outdoor climate
@@ -327,6 +343,7 @@ class DSBinaryInputUsage(IntEnum):
 
 class DSBinaryInputFunction(IntEnum):
     """Binary input sensor functions."""
+
     APP_MODE = 0  # App Mode (no system function)
     PRESENCE = 1  # Presence
     LIGHT = 2  # Light (not yet in use)
@@ -352,6 +369,7 @@ class DSBinaryInputFunction(IntEnum):
 
 class DSErrorState(IntEnum):
     """Device/sensor/output error states."""
+
     OK = 0  # OK
     OPEN_CIRCUIT = 1  # Open circuit / lamp broken
     SHORT_CIRCUIT = 2  # Short circuit
@@ -363,6 +381,7 @@ class DSErrorState(IntEnum):
 
 class ButtonEvent(IntEnum):
     """Button event types."""
+
     SINGLE_PRESS = 0  # Single press
     DOUBLE_PRESS = 1  # Double press
     LONG_PRESS = 2  # Long press start
@@ -376,139 +395,139 @@ DEFAULT_SCENE_VALUES: Dict[int, Dict[str, Any]] = {
         "name": "Area 1 Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_2_OFF: {
         "name": "Area 2 Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_3_OFF: {
         "name": "Area 3 Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_4_OFF: {
         "name": "Area 4 Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.GLOBAL_OFF: {
         "name": "Global Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.DEEP_OFF: {
         "name": "Deep Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.STANDBY: {
         "name": "Standby",
         "channels": {DSChannelType.DEFAULT: 0.01},  # Very dim
         "effect": DSSceneEffect.SLOW,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.WAKE_UP: {
         "name": "Wake Up",
         "channels": {DSChannelType.DEFAULT: 0.50},
         "effect": DSSceneEffect.VERY_SLOW,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.PRESENT: {
         "name": "Present",
         "channels": {DSChannelType.DEFAULT: 0.75},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.ABSENT: {
         "name": "Absent",
         "channels": {DSChannelType.DEFAULT: 0.10},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.SLEEPING: {
         "name": "Sleeping",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.VERY_SLOW,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.ALARM: {
         "name": "Alarm",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.ALERT,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.FIRE: {
         "name": "Fire/Panic",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.NONE,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.STOP: {
         "name": "Stop",
         "channels": {},
         "effect": DSSceneEffect.NONE,
-        "dontCare": True  # Don't change values, just stop
+        "dontCare": True,  # Don't change values, just stop
     },
     DSScene.MIN: {
         "name": "Minimum",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.NONE,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.MAX: {
         "name": "Maximum",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.NONE,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_1_ON: {
         "name": "Area 1 On",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_2_ON: {
         "name": "Area 2 On",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_3_ON: {
         "name": "Area 3 On",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AREA_4_ON: {
         "name": "Area 4 On",
         "channels": {DSChannelType.DEFAULT: 1.0},
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.AUTO_STANDBY: {
         "name": "Auto Standby",
         "channels": {DSChannelType.DEFAULT: 0.05},
         "effect": DSSceneEffect.SLOW,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.SUN_PROTECTION: {
         "name": "Sun Protection",
         "channels": {DSChannelType.SHADE_POSITION_OUTSIDE: 0.0},  # Shades down
         "effect": DSSceneEffect.SMOOTH,
-        "dontCare": False
+        "dontCare": False,
     },
     DSScene.LOCAL_OFF: {
         "name": "Local Off",
         "channels": {DSChannelType.DEFAULT: 0.0},
         "effect": DSSceneEffect.NONE,
-        "dontCare": False
+        "dontCare": False,
     },
 }
 
@@ -577,10 +596,10 @@ def get_group_name(group: int) -> str:
 def get_default_scene_config(scene_number: int) -> Dict[str, Any]:
     """
     Get default configuration for a standard scene.
-    
+
     Args:
         scene_number: Scene number
-        
+
     Returns:
         Dictionary with default scene configuration, or empty dict if not a standard scene
     """
