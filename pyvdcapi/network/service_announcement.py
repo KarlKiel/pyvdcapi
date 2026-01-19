@@ -44,7 +44,7 @@ class ServiceAnnouncer:
     def __init__(
         self,
         port: int,
-        dsuid: str,
+        dsuid: Optional[str] = None,
         host_name: Optional[str] = None,
         use_avahi: bool = False,
     ):
@@ -53,16 +53,17 @@ class ServiceAnnouncer:
 
         Args:
             port: TCP port the vDC host is listening on
-            dsuid: The dSUID of the vDC host (required for TXT records)
+            dsuid: The dSUID of the vDC host (optional for tests). If not provided,
+                   TXT records will contain an empty dSUID string.
             host_name: Optional custom host name (defaults to system hostname)
             use_avahi: If True, use Avahi daemon (Linux). If False, use zeroconf library
         """
         self.port = port
-        self.dsuid = dsuid
+        self.dsuid = dsuid or ""
         self.host_name = host_name or socket.gethostname()
         self.use_avahi = use_avahi
 
-        self._service_type = "_ds-vdc._tcp"
+        self._service_type = "_ds-vdc._tcp.local."
         self._service_name = f"digitalSTROM vDC host on {self.host_name}"
 
         # For zeroconf implementation
@@ -77,12 +78,12 @@ class ServiceAnnouncer:
     # -----------------------
     # Public start/stop API
     # -----------------------
-    async def start(self) -> bool:
-        """
-        Start announcing the vDC host service.
+    async def _start_async(self) -> bool:
+        """Async implementation to start the service announcer.
 
-        Returns:
-            True if announcement started successfully, False otherwise
+        Separated from the public `start()` API so the public API can be
+        both synchronous-friendly (tests call `start()` directly) and
+        awaitable (other code awaits the returned object).
         """
         if self._running:
             logger.warning("Service announcement already running")
@@ -99,8 +100,59 @@ class ServiceAnnouncer:
             logger.error("Failed to start service announcement: %s", e, exc_info=True)
             return False
 
-    async def stop(self) -> None:
-        """Stop announcing the vDC host service."""
+    def start(self):
+        """Public start method.
+
+        Calling this method directly will perform a synchronous start
+        (convenient for simple tests). The returned object is also
+        awaitable, so `await announcer.start()` still works and will
+        execute the async start path.
+        """
+        announcer = self
+
+        class _StartHandle:
+            def __init__(self, announcer):
+                self._announcer = announcer
+                try:
+                    # Perform synchronous start (blocks until ready)
+                    result = announcer.start_sync()
+                except Exception:
+                    result = False
+                self._result = result
+
+            def __bool__(self):
+                return bool(self._result)
+
+            def __await__(self):
+                async def _coro():
+                    # If already running, return current state
+                    if announcer.is_running():
+                        return True
+                    return await announcer._start_async()
+
+                return _coro().__await__()
+
+        return _StartHandle(self)
+
+    def stop(self):
+        """Stop announcing the vDC host service.
+
+        This method is a dispatcher that is usable from synchronous tests
+        and as an awaitable in async code. When called from sync context
+        it performs a synchronous stop; when called from within an event
+        loop it returns a coroutine which should be awaited.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop — perform synchronous stop
+            return self.stop_sync()
+        else:
+            # Running loop — return coroutine to be awaited
+            return self._stop_async()
+
+    async def _stop_async(self) -> None:
+        """Async implementation to stop announcing the vDC host service."""
         if not self._running:
             return
 
@@ -123,27 +175,30 @@ class ServiceAnnouncer:
         the async API instead (await start()) or use "async with".
         """
         try:
-            loop = asyncio.get_running_loop()
-            # If we reach here, an event loop is running
-            raise RuntimeError(
-                "An asyncio event loop is already running. Use await start() or use the async context manager."
-            )
+            asyncio.get_running_loop()
         except RuntimeError:
-            # No running loop, safe to use asyncio.run
-            return asyncio.run(self.start())
+            # No running loop — safe to run the async start path synchronously
+            return asyncio.run(self._start_async())
+        else:
+            # There is an active running loop; caller should use await start()
+            raise RuntimeError(
+                "An asyncio event loop is already running. Use await start() or the async context manager."
+            )
 
     def stop_sync(self) -> None:
         """
         Synchronous wrapper for stop(). Useful when not running inside an event loop.
         """
         try:
-            loop = asyncio.get_running_loop()
-            # If we reach here, an event loop is running
-            raise RuntimeError(
-                "An asyncio event loop is already running. Use await stop() or use the async context manager."
-            )
+            asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(self.stop())
+            # No running loop — safe to run the async stop path synchronously
+            asyncio.run(self._stop_async())
+        else:
+            # There is an active running loop; caller should use await stop()
+            raise RuntimeError(
+                "An asyncio event loop is already running. Use await stop() or the async context manager."
+            )
 
     # -----------------------
     # Async zeroconf methods
@@ -154,9 +209,7 @@ class ServiceAnnouncer:
             from zeroconf import ServiceInfo
             from zeroconf.asyncio import AsyncZeroconf
         except ImportError:
-            logger.error(
-                "zeroconf library not installed. Install with: pip install zeroconf"
-            )
+            logger.error("zeroconf library not installed. Install with: pip install zeroconf")
             return False
 
         try:
@@ -166,7 +219,9 @@ class ServiceAnnouncer:
                 return False
 
             # Type must include .local. suffix for mDNS
-            service_type = f"{self._service_type}.local."
+            service_type = (
+                self._service_type if self._service_type.endswith(".local.") else f"{self._service_type}.local."
+            )
 
             # Create fully-qualified service name: "<instance>.<service_type>"
             service_name = f"{self._service_name}.{service_type}"
@@ -174,8 +229,13 @@ class ServiceAnnouncer:
             # Server name must be a valid DNS name ending with .local. Use lowercase for Avahi compatibility.
             server_name = f"{self.host_name.lower()}.local."
 
-            logger.info("Creating mDNS service: type=%s, name=%s, server=%s, port=%d",
-                        service_type, service_name, server_name, self.port)
+            logger.info(
+                "Creating mDNS service: type=%s, name=%s, server=%s, port=%d",
+                service_type,
+                service_name,
+                server_name,
+                self.port,
+            )
             logger.debug("Addresses: %s", [".".join(str(b) for b in addr) for addr in addresses])
 
             # Prepare TXT records.
@@ -252,10 +312,10 @@ class ServiceAnnouncer:
         # Use escaped wildcard '\%h' in the name to match the documented example.
         service_xml = (
             "<?xml version=\"1.0\" standalone='no'?>\n"
-            "<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n"
+            '<!DOCTYPE service-group SYSTEM "avahi-service.dtd">\n'
             "<service-group>\n"
-            f"<name replace-wildcards=\"yes\">{self._service_name} on \\%h</name>\n"
-            "<service protocol=\"ipv4\">\n"
+            f'<name replace-wildcards="yes">{self._service_name} on \\%h</name>\n'
+            '<service protocol="ipv4">\n'
             f"<type>{self._service_type}</type>\n"
             f"<port>{self.port}</port>\n"
             f"<txt-record>dSUID={self.dsuid}</txt-record>\n"
@@ -280,9 +340,10 @@ class ServiceAnnouncer:
 
         except PermissionError:
             logger.error(
-                "Permission denied writing to %s. Avahi service announcement requires root privileges. Consider using zeroconf mode instead (use_avahi=False).",
+                "Permission denied writing to %s. Avahi service announcement requires root privileges.",
                 service_file,
             )
+            logger.error("Consider using zeroconf mode instead (use_avahi=False).")
             return False
         except Exception as e:
             logger.error("Failed to create Avahi service file: %s", e)

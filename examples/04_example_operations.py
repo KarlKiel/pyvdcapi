@@ -51,9 +51,9 @@ def ensure_requirements() -> None:
     """
     # mapping pip package -> top-level module name
     checks = {
-        'protobuf': 'google',
-        'pyyaml': 'yaml',
-        'zeroconf': 'zeroconf',
+        "protobuf": "google",
+        "pyyaml": "yaml",
+        "zeroconf": "zeroconf",
     }
 
     missing = []
@@ -96,8 +96,10 @@ async def main():
 
     # Parse CLI args / environment for persistence selection
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('--persistence', '-p', help='Persistence YAML file to use')
-    parser.add_argument('--force-interactive', action='store_true', help='Force interactive prompts even if persistence exists')
+    parser.add_argument("--persistence", "-p", help="Persistence YAML file to use")
+    parser.add_argument(
+        "--force-interactive", action="store_true", help="Force interactive prompts even if persistence exists"
+    )
     args, _ = parser.parse_known_args()
 
     # Compute MAC and service hostname early
@@ -106,7 +108,7 @@ async def main():
     service_host_name = socket.getfqdn()
 
     # Determine persistence file: CLI > ENV > prompt
-    persistence = args.persistence or os.getenv('PERSIST')
+    persistence = args.persistence or os.getenv("PERSIST")
     if not persistence:
         persistence = ask("Persistence file", "example_announced_config.yaml")
     ppath = Path(persistence)
@@ -116,6 +118,7 @@ async def main():
         print(f"Found existing persistence file: {persistence} — recreating host from it without prompts")
         try:
             from pyvdcapi.persistence.yaml_store import YAMLPersistence
+
             pers = YAMLPersistence(persistence)
             persisted_host_cfg = pers.get_vdc_host() or {}
             skip_interactive_creation = True
@@ -130,6 +133,8 @@ async def main():
             port = int(port_str)
         except Exception:
             port = 8444
+
+        # Local imports intentionally avoided here; imported later after persistence inspection
 
         print(f"Detected MAC address: {mac}")
 
@@ -146,13 +151,13 @@ async def main():
         ensure_requirements()
     else:
         # Use persisted values where available; fall back to sensible defaults
-        port = int(persisted_host_cfg.get('port', 8444))
-        name = persisted_host_cfg.get('name', 'vDC Test Server')
-        vendor = persisted_host_cfg.get('vendor_id', persisted_host_cfg.get('vendor', 'KarlKiel'))
-        model = persisted_host_cfg.get('model', 'TestServer')
-        model_uid = persisted_host_cfg.get('model_uid', persisted_host_cfg.get('modelUID', 'clean_script'))
-        model_version = persisted_host_cfg.get('model_version', persisted_host_cfg.get('modelVersion', '0.8B'))
-        use_avahi = persisted_host_cfg.get('use_avahi', False)
+        port = int(persisted_host_cfg.get("port", 8444))
+        name = persisted_host_cfg.get("name", "vDC Test Server")
+        vendor = persisted_host_cfg.get("vendor_id", persisted_host_cfg.get("vendor", "KarlKiel"))
+        model = persisted_host_cfg.get("model", "TestServer")
+        model_uid = persisted_host_cfg.get("model_uid", persisted_host_cfg.get("modelUID", "clean_script"))
+        model_version = persisted_host_cfg.get("model_version", persisted_host_cfg.get("modelVersion", "0.8B"))
+        use_avahi = persisted_host_cfg.get("use_avahi", False)
         # Ensure requirements so imports succeed
         ensure_requirements()
 
@@ -171,13 +176,13 @@ async def main():
             if vdcs:
                 print(f"  Persisted vDCs: {len(vdcs)}")
                 for dsuid, cfg in vdcs.items():
-                    name = cfg.get('name') or cfg.get('model') or ''
+                    name = cfg.get("name") or cfg.get("model") or ""
                     print(f"    {dsuid}: {name}")
                     vdsds = pers.get_vdsds_for_vdc(dsuid)
                     if vdsds:
                         print(f"      Devices: {len(vdsds)}")
                         for ddsuid, dcfg in vdsds.items():
-                            dname = dcfg.get('name') or dcfg.get('model') or ''
+                            dname = dcfg.get("name") or dcfg.get("model") or ""
                             print(f"        {ddsuid}: {dname}")
             else:
                 print("  No persisted vDCs found in file.")
@@ -188,8 +193,8 @@ async def main():
         except Exception as e:
             print(f"Warning: failed to inspect persistence file: {e}")
 
-    from pyvdcapi.entities import VdcHost
-    from pyvdcapi.core.constants import DSGroup
+    from pyvdcapi.entities import VdcHost  # noqa: E402
+    from pyvdcapi.core.constants import DSGroup  # noqa: E402
 
     host = VdcHost(
         name=name,
@@ -227,7 +232,8 @@ async def main():
     if host.is_connected():
         print("vdSM handshake complete — ready to announce vDCs.")
     else:
-        print(f"No vdSM connected after {int(wait_seconds)}s — you can still create a vDC, but announces will be queued until a vdSM connects.")
+        print(f"No vdSM connected after {int(wait_seconds)}s.")
+        print("You can still create a vDC, but announces will be queued until a vdSM connects.")
 
     # Optionally create a vDC and announce it (interactive)
     if skip_interactive_creation:
@@ -246,6 +252,7 @@ async def main():
         if host._session and host._session.writer:
             try:
                 from pyvdcapi.network.tcp_server import TCPServer
+
                 msg = vdc.announce_to_vdsm()
                 await TCPServer.send_message(host._session.writer, msg)
                 print(f"Sent announcevdc for vDC {vdc.dsuid}")
@@ -256,7 +263,9 @@ async def main():
 
     # Optionally create a vdSD (device) asking only for required fields
     if skip_interactive_creation:
-        print("Persistence present — skipping interactive device creation; persisted devices will be announced on handshake.")
+        print(
+            "Persistence present — skipping interactive device creation."
+        )
         create_device_resp = "n"
     else:
         create_device_resp = ask("Create a new vdSD (device) now? (y/N)", "N").lower()
@@ -321,6 +330,7 @@ async def main():
             if host._session and host._session.writer:
                 try:
                     from pyvdcapi.network.tcp_server import TCPServer
+
                     msg = vdsd.announce_to_vdsm()
                     await TCPServer.send_message(host._session.writer, msg)
                     print(f"Sent announcevdsd for vdSD {vdsd.dsuid}")
@@ -342,7 +352,7 @@ async def main():
         print("Stopped.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

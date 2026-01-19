@@ -92,8 +92,11 @@ dim_up.on_press(on_dim_up)
 
 import logging
 import time
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, TYPE_CHECKING
 from ..utils.callbacks import Observable
+
+if TYPE_CHECKING:
+    from ..entities.vdsd import VdSD
 
 logger = logging.getLogger(__name__)
 
@@ -101,55 +104,49 @@ logger = logging.getLogger(__name__)
 class Button:
     """
     Represents a button input on a device.
-    
+
     A Button generates events when activated, supporting different
     interaction types (single, double, long press). The button:
-    
+
     - Detects press/release events from hardware
     - Determines event type based on timing
     - Triggers application callbacks
     - Sends notifications to vdSM
     - Tracks button state and history
-    
+
     Button Configuration:
     - button_id: Unique identifier within device
     - button_type: Primary event type this button generates
     - name: Human-readable label
-    
+
     Event Detection:
     The button can detect various interaction patterns:
     - Single press: Quick tap
     - Double press: Two quick taps (within 500ms)
     - Long press: Hold for >1 second
     - Release: Released after long press
-    
+
     Attributes:
         vdsd: Parent device
         button_id: Button identifier (0-based index)
         button_type: Default button event type
         name: Button name
     """
-    
+
     # Timing constants for button event detection
     DOUBLE_PRESS_INTERVAL = 0.5  # Max time between presses for double-press (500ms)
-    LONG_PRESS_THRESHOLD = 1.0   # Min time held for long press (1 second)
-    
-    def __init__(
-        self,
-        vdsd: 'VdSD',
-        name: str,
-        button_type: int = 0,
-        button_id: Optional[int] = None
-    ):
+    LONG_PRESS_THRESHOLD = 1.0  # Min time held for long press (1 second)
+
+    def __init__(self, vdsd: "VdSD", name: str, button_type: int = 0, button_id: Optional[int] = None):
         """
         Initialize button input.
-        
+
         Args:
             vdsd: Parent VdSD device
             name: Human-readable button name (e.g., "Power Toggle")
             button_type: Default event type (0=single, 1=double, 2=long, 3=release)
             button_id: Unique button identifier (auto-assigned if None)
-        
+
         Example:
             # Simple toggle button
             toggle = Button(
@@ -157,7 +154,7 @@ class Button:
                 name="On/Off Toggle",
                 button_type=0  # Single press
             )
-            
+
             # Dimmer control button
             dim_up = Button(
                 vdsd=device,
@@ -168,7 +165,7 @@ class Button:
         self.vdsd = vdsd
         self.name = name
         self.button_type = button_type
-        
+
         # Auto-assign button ID if not provided
         # (Based on number of existing buttons in device)
         if button_id is None:
@@ -176,32 +173,29 @@ class Button:
             self.button_id = 0
         else:
             self.button_id = button_id
-        
+
         # Button state tracking
         self._pressed = False
         self._press_start_time: Optional[float] = None
         self._last_press_time: Optional[float] = None
         self._press_count = 0
-        
+
         # Observable for button events
         # Subscribers receive: callback(button_id, event_type)
         self._event_observable = Observable()
-        
-        logger.debug(
-            f"Created button: id={self.button_id}, "
-            f"name='{name}', type={button_type}"
-        )
-    
+
+        logger.debug(f"Created button: id={self.button_id}, " f"name='{name}', type={button_type}")
+
     def press(self) -> None:
         """
         Handle button press event from hardware.
-        
+
         This should be called when the physical button is pressed down.
         The method tracks timing to determine the event type:
         - If pressed soon after previous press → double press
         - If held down → long press (detected on release)
         - Otherwise → single press (detected on release)
-        
+
         Example:
             # Hardware interrupt/polling detects button press
             gpio_button.on_press(lambda: button.press())
@@ -209,36 +203,35 @@ class Button:
         if self._pressed:
             logger.warning(f"Button {self.button_id} already pressed")
             return
-        
+
         current_time = time.time()
-        
+
         # Check for double press
         # If this press is within DOUBLE_PRESS_INTERVAL of last press
-        if (self._last_press_time and 
-            current_time - self._last_press_time < self.DOUBLE_PRESS_INTERVAL):
+        if self._last_press_time and current_time - self._last_press_time < self.DOUBLE_PRESS_INTERVAL:
             self._press_count += 1
         else:
             self._press_count = 1
-        
+
         # Mark as pressed and record time
         self._pressed = True
         self._press_start_time = current_time
-        
+
         logger.debug(f"Button {self.button_id} pressed (count={self._press_count})")
-    
+
     def release(self) -> None:
         """
         Handle button release event from hardware.
-        
+
         This should be called when the physical button is released.
         Based on timing since press(), this determines the event type
         and triggers appropriate callbacks.
-        
+
         Event Type Determination:
         1. If press_count >= 2 → Double press (type 1)
         2. If held > LONG_PRESS_THRESHOLD → Long press (type 2) or Release (type 3)
         3. Otherwise → Single press (type 0)
-        
+
         Example:
             # Hardware interrupt/polling detects button release
             gpio_button.on_release(lambda: button.release())
@@ -246,13 +239,13 @@ class Button:
         if not self._pressed:
             logger.warning(f"Button {self.button_id} not currently pressed")
             return
-        
+
         current_time = time.time()
         press_duration = current_time - self._press_start_time
-        
+
         # Determine event type based on timing
         event_type = self.button_type  # Default to configured type
-        
+
         if self._press_count >= 2:
             # Double press detected
             event_type = 1
@@ -265,39 +258,36 @@ class Button:
         else:
             # Single press
             event_type = 0
-        
+
         # Update state
         self._pressed = False
         self._last_press_time = current_time
         self._press_start_time = None
-        
-        logger.info(
-            f"Button {self.button_id} released: event_type={event_type}, "
-            f"duration={press_duration:.3f}s"
-        )
-        
+
+        logger.info(f"Button {self.button_id} released: event_type={event_type}, " f"duration={press_duration:.3f}s")
+
         # Trigger callbacks
         self._event_observable.notify(self.button_id, event_type)
-        
+
         # TODO: Send button event notification to vdSM
         # self.vdsd.send_button_notification(self.button_id, event_type)
-    
+
     def click(self, event_type: Optional[int] = None) -> None:
         """
         Simulate a button click (press + release).
-        
+
         Convenience method for testing or programmatic button activation.
-        
+
         Args:
             event_type: Specific event type to generate (overrides detection)
-        
+
         Example:
             # Simulate single press
             button.click()
-            
+
             # Simulate double press
             button.click(event_type=1)
-            
+
             # Simulate long press
             button.click(event_type=2)
         """
@@ -310,24 +300,24 @@ class Button:
             # Directly trigger event
             logger.debug(f"Button {self.button_id} simulated click: type={event_type}")
             self._event_observable.notify(self.button_id, event_type)
-    
+
     def on_press(self, callback: Callable[[int, int], None]) -> None:
         """
         Register callback for button events.
-        
+
         The callback will be invoked when button events occur.
-        
+
         Callback signature: callback(button_id: int, event_type: int)
-        
+
         Event types:
         - 0: Single press
         - 1: Double press
         - 2: Long press
         - 3: Release (after long press)
-        
+
         Args:
             callback: Function to call on button events
-        
+
         Example:
             def handle_button(button_id, event_type):
                 if event_type == 0:  # Single press
@@ -342,56 +332,89 @@ class Button:
                 elif event_type == 3:  # Release
                     print("Stop dimming")
                     device.stop_dimming()
-            
+
             button.on_press(handle_button)
         """
         self._event_observable.subscribe(callback)
-    
+
     def remove_callback(self, callback: Callable[[int, int], None]) -> None:
         """
         Remove a button event callback.
-        
+
         Args:
             callback: Function to remove from subscribers
         """
         self._event_observable.unsubscribe(callback)
-    
+
     def is_pressed(self) -> bool:
         """
         Check if button is currently pressed.
-        
+
         Returns:
             True if button is pressed down, False if released
         """
         return self._pressed
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert button to dictionary for property tree.
-        
+
         Returns:
             Dictionary representation of button configuration
         """
         return {
-            'inputType': 'button',
-            'buttonID': self.button_id,
-            'buttonType': self.button_type,
-            'name': self.name,
-            'pressed': self._pressed,
+            # Description fields (static)
+            "name": self.name,
+            "buttonID": self.button_id,
+            "buttonType": self.button_type,
+            "buttonElementID": getattr(self, "button_element", 0),
+            # Settings (writable/persistent)
+            "settings": {
+                "group": getattr(self, "group", None),
+                "function": getattr(self, "function", None),
+                "mode": getattr(self, "mode", None),
+                "channel": getattr(self, "channel", None),
+                "setsLocalPriority": getattr(self, "setsLocalPriority", False),
+                "callsPresent": getattr(self, "callsPresent", False),
+            },
+            # State (dynamic)
+            "state": {"value": self._pressed, "clickType": None},
         }
-    
+
     def from_dict(self, data: Dict[str, Any]) -> None:
         """
         Update button configuration from dictionary.
-        
+
         Args:
             data: Dictionary with button properties
         """
-        if 'name' in data:
-            self.name = data['name']
-        if 'buttonType' in data:
-            self.button_type = data['buttonType']
-    
+        if "name" in data:
+            self.name = data["name"]
+        if "buttonType" in data:
+            self.button_type = data["buttonType"]
+        if "buttonElementID" in data:
+            self.button_element = data["buttonElementID"]
+
+        # Settings may be provided under settings
+        settings = data.get("settings") or {}
+        if "group" in settings:
+            self.group = settings["group"]
+        if "function" in settings:
+            self.function = settings["function"]
+        if "mode" in settings:
+            self.mode = settings["mode"]
+        if "channel" in settings:
+            self.channel = settings["channel"]
+        if "setsLocalPriority" in settings:
+            self.setsLocalPriority = settings["setsLocalPriority"]
+        if "callsPresent" in settings:
+            self.callsPresent = settings["callsPresent"]
+
+        # State updates
+        state = data.get("state") or {}
+        if "value" in state:
+            self._pressed = state["value"]
+
     def __repr__(self) -> str:
         """String representation of button."""
         return (

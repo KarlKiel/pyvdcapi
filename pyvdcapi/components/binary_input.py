@@ -68,7 +68,7 @@ def on_motion_change(input_id, state):
     else:  # No motion
         print("No motion")
         # Could trigger "absent" scene after timeout
-    
+
 motion.on_change(on_motion_change)
 
 # When hardware detects motion
@@ -96,36 +96,39 @@ door.on_change(on_door_change)
 
 import logging
 import time
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, TYPE_CHECKING
 from ..utils.callbacks import Observable
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from ..entities.vdsd import VdSD
 
 
 class BinaryInput:
     """
     Represents a binary state input on a device.
-    
+
     A BinaryInput tracks a two-state condition and generates events
     when the state changes. The input:
-    
+
     - Tracks current state (active/inactive, on/off, etc.)
     - Detects state transitions
     - Triggers callbacks on changes
     - Sends notifications to vdSM
     - Maintains state history and timing
-    
+
     Binary Input Configuration:
     - input_id: Unique identifier within device
     - input_type: Type of sensor (motion, contact, presence, etc.)
     - name: Human-readable label
     - invert: Whether to invert the logic (True=inactive, False=active)
-    
+
     State Tracking:
     - state: Current boolean state (True=active, False=inactive)
     - last_change: Timestamp of last state change
     - age: Time since last change
-    
+
     Attributes:
         vdsd: Parent device
         input_id: Binary input identifier
@@ -134,19 +137,19 @@ class BinaryInput:
         state: Current state (True/False)
         invert: Logic inversion flag
     """
-    
+
     def __init__(
         self,
-        vdsd: 'VdSD',
+        vdsd: "VdSD",
         name: str,
         input_type: str = "contact",
         input_id: Optional[int] = None,
         invert: bool = False,
-        initial_state: bool = False
+        initial_state: bool = False,
     ):
         """
         Initialize binary input.
-        
+
         Args:
             vdsd: Parent VdSD device
             name: Human-readable input name (e.g., "Motion Detector")
@@ -160,7 +163,7 @@ class BinaryInput:
             input_id: Unique input identifier (auto-assigned if None)
             invert: If True, inverts state logic (True=inactive, False=active)
             initial_state: Starting state (default False=inactive)
-        
+
         Example:
             # Motion detector (active-high logic)
             motion = BinaryInput(
@@ -169,7 +172,7 @@ class BinaryInput:
                 input_type="motion",
                 initial_state=False
             )
-            
+
             # Door sensor (active-low logic - True=closed)
             door = BinaryInput(
                 vdsd=device,
@@ -183,111 +186,106 @@ class BinaryInput:
         self.name = name
         self.input_type = input_type
         self.invert = invert
-        
+
         # Auto-assign input ID if not provided
         if input_id is None:
             self.input_id = 0  # Would be set by VdSD when added
         else:
             self.input_id = input_id
-        
+
         # State tracking
         self._state = initial_state
         self._last_change_time = time.time()
-        
+
         # Observable for state changes
         # Subscribers receive: callback(input_id, state)
         self._change_observable = Observable()
-        
+
         logger.debug(
             f"Created binary input: id={self.input_id}, "
             f"name='{name}', type={input_type}, "
             f"invert={invert}, state={initial_state}"
         )
-    
+
     def set_state(self, state: bool) -> None:
         """
         Update binary input state from hardware.
-        
+
         This should be called when the hardware detects a state change.
         If the state actually changed, this:
         1. Updates internal state
         2. Records timestamp
         3. Triggers callbacks
         4. Sends notification to vdSM
-        
+
         Args:
             state: New state (True=active, False=inactive)
                   Note: Affected by invert flag
-        
+
         Example:
             # Hardware interrupt detects motion
             def motion_interrupt():
                 motion_input.set_state(True)
-            
+
             # Hardware polling detects door opened
             if gpio.read_door_sensor() == GPIO.HIGH:
                 door_input.set_state(False)  # Open (if inverted)
         """
         # Apply inversion if configured
         effective_state = not state if self.invert else state
-        
+
         # Check if state actually changed
         if effective_state == self._state:
-            logger.debug(
-                f"Binary input {self.input_id} already in state {effective_state}"
-            )
+            logger.debug(f"Binary input {self.input_id} already in state {effective_state}")
             return
-        
+
         # Update state
         old_state = self._state
         self._state = effective_state
         self._last_change_time = time.time()
-        
-        logger.info(
-            f"Binary input {self.input_id} ('{self.name}') state changed: "
-            f"{old_state} → {effective_state}"
-        )
-        
+
+        logger.info(f"Binary input {self.input_id} ('{self.name}') state changed: " f"{old_state} → {effective_state}")
+
         # Trigger callbacks
         self._change_observable.notify(self.input_id, effective_state)
-        
+
         # TODO: Send binary input state change notification to vdSM
         # self.vdsd.send_binary_input_notification(
         #     self.input_id,
         #     effective_state
         # )
-    
+
     def get_state(self) -> bool:
         """
         Get current input state.
-        
+
         Returns:
             Current state (True=active, False=inactive)
         """
         return self._state
-    
+
     def get_age(self) -> float:
         """
         Get age of current state in milliseconds.
-        
+
         Indicates how long the input has been in current state.
-        
+
         Returns:
             Milliseconds since last state change
         """
         return (time.time() - self._last_change_time) * 1000.0
-    
+
     def on_change(self, callback: Callable[[int, bool], None]) -> None:
         """
         Register callback for state changes.
-        
+
         The callback will be invoked whenever the state changes.
-        
+
         Callback signature: callback(input_id: int, state: bool)
-        
+
         Args:
             callback: Function to call on state changes
-        
+
         Example:
             def handle_motion(input_id, state):
                 if state:  # Motion detected
@@ -296,9 +294,9 @@ class BinaryInput:
                 else:  # No motion
                     print("No motion - setting timer for auto-off")
                     # Start 5-minute timer to turn off lights
-            
+
             motion_input.on_change(handle_motion)
-            
+
             def handle_door(input_id, state):
                 # State is inverted for this sensor
                 if state:  # Door closed
@@ -306,51 +304,57 @@ class BinaryInput:
                 else:  # Door open
                     print("Door opened - sending alert!")
                     send_security_alert()
-            
+
             door_input.on_change(handle_door)
         """
         self._change_observable.subscribe(callback)
-    
+
     def remove_callback(self, callback: Callable[[int, bool], None]) -> None:
         """
         Remove a state change callback.
-        
+
         Args:
             callback: Function to remove from subscribers
         """
         self._change_observable.unsubscribe(callback)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert binary input to dictionary for property tree.
-        
+
         Returns:
             Dictionary representation of binary input
         """
         return {
-            'inputType': 'binaryInput',
-            'inputID': self.input_id,
-            'sensorType': self.input_type,
-            'name': self.name,
-            'invert': self.invert,
-            'state': self._state,
-            'age': self.get_age(),
+            # Description / config
+            "name": self.name,
+            "inputID": self.input_id,
+            "inputType": "binary",
+            "sensorType": self.input_type,
+            "invert": self.invert,
+            # State
+            "state": {"value": self._state, "age": self.get_age()},
         }
-    
+
     def from_dict(self, data: Dict[str, Any]) -> None:
         """
         Update binary input configuration from dictionary.
-        
+
         Args:
             data: Dictionary with input properties
         """
-        if 'name' in data:
-            self.name = data['name']
-        if 'invert' in data:
-            self.invert = data['invert']
-        if 'sensorType' in data:
-            self.input_type = data['sensorType']
-    
+        if "name" in data:
+            self.name = data["name"]
+        # Accept settings nested under 'settings' or top-level keys
+        settings = data.get("settings") or data
+        if "invert" in settings:
+            self.invert = settings["invert"]
+        if "sensorType" in settings:
+            self.input_type = settings["sensorType"]
+        if "inputType" in settings:
+            # normalize possible values like 'binary' or integer codes
+            pass
+
     def __repr__(self) -> str:
         """String representation of binary input."""
         return (

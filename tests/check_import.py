@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyvdcapi.network import service_announcement
+from pyvdcapi.network import service_announcement  # noqa: E402
+
 print(f"service_announcement loaded from: {service_announcement.__file__}")
 
 # Check if _start_zeroconf_async exists
