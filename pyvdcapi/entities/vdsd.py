@@ -121,8 +121,7 @@ from __future__ import annotations
 import logging
 import asyncio
 from typing import Dict, List, Optional, Any, Callable
-from pyvdcapi.network.genericVDC_pb2 import Message, VDC_SEND_ANNOUNCE_DEVICE
-
+from pyvdcapi.network import genericVDC_pb2
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
 from ..core.constants import DSChannelType, DSSceneEffect
 from ..properties.common import CommonProperties
@@ -256,7 +255,7 @@ class VdSD:
         if not vdsd_config:
             # First time - initialize with provided properties
             # Convert enum to value for YAML serialization
-            primary_group_value = primary_group.value if hasattr(primary_group, "value") else primary_group
+            primary_group_value = primary_group if isinstance(primary_group, int) else primary_group.value
             vdsd_config = {
                 "dSUID": self.dsuid,
                 "type": "vDSD",
@@ -282,7 +281,7 @@ class VdSD:
             entity_type="vdSD",
             name=name,
             model=model,
-            model_uid=model_uid,
+            model_uid=model_uid if model_uid else "",
             model_version=model_version if model_version else "",
             **extra_props,
         )
@@ -441,7 +440,7 @@ class VdSD:
                         min_value=channel_config.get("min", 0.0),
                         max_value=channel_config.get("max", 100.0),
                         resolution=channel_config.get("resolution", 0.1),
-                        default_value=channel_config.get("default", 0.0),
+                        initial_value=channel_config.get("default", 0.0),
                     )
                     output.add_channel(channel)
 
@@ -463,31 +462,29 @@ class VdSD:
         # Configure binary inputs
         if "binary_inputs" in config:
             for input_config in config["binary_inputs"]:
-                binary_input = BinaryInput(
-                    vdsd=self,
+                binary_input = self.add_binary_input(
                     name=input_config.get("name", ""),
                     input_type=input_config.get("inputType", "contact"),
                     input_id=input_config.get("inputID"),
                     invert=input_config.get("invert", False),
                     initial_state=input_config.get("initialState", False),
+                    **input_config.get("settings", {})
                 )
-                self._binary_inputs.append(binary_input)
                 logger.debug(f"Added binary input: {binary_input.name}")
 
         # Configure sensors
         if "sensors" in config:
             for sensor_config in config["sensors"]:
-                sensor = Sensor(
-                    vdsd=self,
-                    name=sensor_config.get("name", ""),
+                sensor = self.add_sensor(
                     sensor_type=sensor_config.get("sensorType", "custom"),
                     unit=sensor_config.get("unit", ""),
                     min_value=sensor_config.get("min"),
                     max_value=sensor_config.get("max"),
+                    name=sensor_config.get("name", ""),
                     resolution=sensor_config.get("resolution", 0.1),
                     initial_value=sensor_config.get("initialValue"),
+                    sensor_id=sensor_config.get("sensorID")
                 )
-                self._sensors.append(sensor)
                 logger.debug(f"Added sensor: {sensor.name}")
 
         # Configure scenes
@@ -622,8 +619,8 @@ class VdSD:
         config = self.export_configuration()
 
         # Get original device properties
-        model = self._common_props.get("model")
-        primary_group = self._vdsd_props.get("primaryGroup")
+        model = self._common_props.get_property("model")
+        primary_group = self._vdsd_props.get_property("primaryGroup")
 
         # Auto-assign enumeration if not provided
         if enumeration is None:
@@ -643,8 +640,9 @@ class VdSD:
         # Apply configuration to clone
         clone_device.configure(config)
 
+        original_name = self._common_props.get_property("name")
         logger.info(
-            f"Cloned vdSD {self.dsuid} ('{self._common_props.get('name')}') " f"to {clone_device.dsuid} ('{new_name}')"
+            f"Cloned vdSD {self.dsuid} ('{original_name}') " f"to {clone_device.dsuid} ('{new_name}')"
         )
 
         return clone_device
@@ -1056,6 +1054,74 @@ class VdSD:
             # No event loop, can't send notification
             logger.warning("No event loop available for output channel push notification")
 
+    def add_binary_input(
+        self,
+        name: str,
+        input_type: str,
+        **properties,
+    ) -> "BinaryInput":
+        """
+        Add a binary input to this device.
+
+        Binary inputs represent two-state conditions:
+        - Motion detector (motion detected / no motion)
+        - Door/window contact (open / closed)
+        - Presence sensor (present / absent)
+        - Water leak detector (leak / no leak)
+
+        Args:
+            name: Human-readable name for the binary input
+            input_type: Type of binary input (motion, contact, presence, etc.)
+            **properties: Additional binary input properties
+
+        Returns:
+            BinaryInput instance
+
+        Raises:
+            RuntimeError: If device has already been announced to vdSM
+
+        Example:
+            # Motion sensor
+            motion = device.add_binary_input(
+                name="Living Room Motion",
+                input_type="motion"
+            )
+
+            # Update state from hardware
+            motion.update_state(True)  # Motion detected
+
+        Note:
+            This method cannot be called after the device has been announced
+            to vdSM. Device structure becomes immutable at announcement per
+            vDC API specification. To modify a device, you must:
+            1. Call vanish() on the old device
+            2. Create a new device with desired structure
+            3. Announce the new device
+        """
+        if self._announced:
+            raise RuntimeError(
+                f"Cannot add binary input to device {self.dsuid} after announcement to vdSM. "
+                f"Device structure is immutable once announced per vDC API specification. "
+                f"To modify device structure: 1) call vanish() on this device, "
+                f"2) create new device with desired structure, 3) announce new device."
+            )
+
+        from pyvdcapi.components.binary_input import BinaryInput
+
+        binary_input = BinaryInput(
+            vdsd=self,
+            name=name,
+            input_type=input_type,
+            **properties
+        )
+        self._binary_inputs.append(binary_input)
+
+        logger.info(
+            f"Added binary input '{name}' (type: {input_type}) to device {self.dsuid}"
+        )
+
+        return binary_input
+
     def add_sensor(
         self,
         sensor_type: str,
@@ -1313,15 +1379,15 @@ class VdSD:
         # Persist changes
         self._save_config()
 
-    def announce_to_vdsm(self) -> Message:
+    def announce_to_vdsm(self) -> Any:
         """
         Create device announcement message for vdSM.
 
         Returns:
             Message with vdc_SendAnnounceDevice
         """
-        message = Message()
-        message.type = VDC_SEND_ANNOUNCE_DEVICE
+        message = genericVDC_pb2.Message()  # type: ignore[attr-defined]
+        message.type = genericVDC_pb2.VDC_SEND_ANNOUNCE_DEVICE  # type: ignore[attr-defined]
         # Optionally set message_id when host/session has previously
         # received a non-zero id (use last_received + 1). Otherwise leave
         # the envelope id absent on the wire.
@@ -1506,11 +1572,13 @@ class VdSD:
 
     def __repr__(self) -> str:
         """String representation of device."""
+        name = self._common_props.get_property("name")
+        primary_group = self._vdsd_props.get_property("primaryGroup")
         return (
             f"VdSD(dsuid='{self.dsuid}', "
-            f"name='{self._common_props.get('name')}', "
-            f"group={self._vdsd_props.get('primaryGroup')}, "
-            f"outputs={len(self._outputs)})"
+            f"name='{name}', "
+            f"group={primary_group}, "
+            f"output={'yes' if self._output else 'no'})"
         )
 
     # ===================================================================
@@ -1633,7 +1701,7 @@ class VdSD:
         logger.info(f"Save scene {scene} on device {self.dsuid}")
 
         # Capture current output values
-        scene_config = {"ignoreLocalPriority": ignore_local_priority}
+        scene_config: Dict[str, Any] = {"ignoreLocalPriority": ignore_local_priority}
 
         if self._output:
             # Get all channel values
@@ -1745,7 +1813,7 @@ class VdSD:
             await self.actions.call_action("identify", duration=duration)
         else:
             # Default implementation: blink output if available
-            output = self.get_output()
+            output = self._output
             if output:
                 # Save current state
                 original_values = output.get_all_channel_values()
@@ -1869,11 +1937,8 @@ class VdSD:
             self._control_values[control_name] = value
 
         # Trigger hardware callback if registered
-        try:
-            if getattr(self, "_hardware_callbacks", None) and self._hardware_callbacks.get("on_control_change"):
-                self._hardware_callbacks["on_control_change"](control_name, value)
-        except Exception:
-            pass
+        # Note: _hardware_callbacks removed in favor of Observable pattern
+        pass
 
         # Persist control values mapping so it is available via persistence for vdSM queries
         try:
@@ -1905,8 +1970,8 @@ class VdSD:
             properties: Optional specific properties to push
         """
         # Get host reference
-        if hasattr(self, "_vdc") and self._vdc:
-            host = self._vdc._host
+        if hasattr(self.vdc, "host"):
+            host = self.vdc.host
             if host:
                 await host.send_push_notification(self.dsuid, properties)
 
