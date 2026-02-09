@@ -3,7 +3,9 @@ from pyvdcapi.components.binary_input import BinaryInput
 
 def test_binary_input_state_and_callbacks():
     class DummyVdSD:
-        pass
+        def push_binary_input_state(self, input_id, state):
+            """Mock push notification method."""
+            pass
 
     vdsd = DummyVdSD()
     bi = BinaryInput(vdsd=vdsd, name="Door", input_type="contact", input_id=2, invert=False, initial_state=False)

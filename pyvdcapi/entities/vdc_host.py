@@ -65,7 +65,7 @@ dimmer = light_vdc.create_vdsd(
     name="Living Room Dimmer",
     model="Dimmer 1ch",
     primary_group=DSGroup.YELLOW,
-    output_type=DSOutputFunction.DIMMER
+    # output_function can be passed in **properties
 )
 
 # Start the host
@@ -1051,7 +1051,9 @@ class VdcHost:
         Args:
             name: vDC name (e.g., "Hue Bridge")
             model: vDC model identifier (human-readable)
-            model_uid: Unique model identifier for vdSM (auto-generated from model if not provided)
+            model_uid: Unique model identifier for vdSM. If not provided, auto-generated
+                from model name by converting to lowercase and replacing spaces/dots
+                with dashes. Example: "My Device v1.0" → "my-device-v1-0"
             model_version: Model version string (default: "1.0")
             vendor_id: Vendor ID (defaults to host's vendor)
             mac_address: MAC for dSUID (defaults to host's MAC)
@@ -1111,8 +1113,18 @@ class VdcHost:
 
     async def _load_vdcs(self) -> None:
         """
-        Load persisted vDC configurations from persistence and instantiate
-        corresponding Vdc objects so they can be announced to vdSM.
+        Load persisted vDC configurations from YAML and restore to host.
+
+        Called during host initialization to restore vDCs from previous session.
+        For each persisted vDC:
+        1. Read vDC configuration from YAML persistence
+        2. Extract properties (name, model, model_uid, enumeration)
+        3. Create Vdc instance (which triggers _load_vdsds internally)
+        4. Add to host's vDC collection
+
+        This ensures the complete vDC hierarchy (host → vDCs → devices) persists
+        across restarts. Each Vdc automatically loads its own devices during
+        instantiation.
         """
         # Import here to avoid circular import
         from .vdc import Vdc
@@ -1174,6 +1186,39 @@ class VdcHost:
             List of Vdc instances
         """
         return list(self._vdcs.values())
+
+    def delete_vdc(self, dsuid: str) -> bool:
+        """
+        Delete a vDC and all its devices.
+
+        WARNING: This removes the vDC from memory and persistence.
+        All devices (vdSDs) in the vDC will also be removed.
+
+        Args:
+            dsuid: The vDC's dSUID to delete
+
+        Returns:
+            True if vDC was deleted, False if not found
+
+        Example:
+            if host.delete_vdc(old_vdc_dsuid):
+                logger.info("vDC removed successfully")
+        """
+        if dsuid not in self._vdcs:
+            logger.warning(f"Cannot delete vDC {dsuid} - not found")
+            return False
+
+        vdc = self._vdcs[dsuid]
+        logger.info(f"Deleting vDC: {vdc._common_props.get_property('name')} ({dsuid})")
+
+        # Remove from memory
+        del self._vdcs[dsuid]
+
+        # Remove from persistence
+        self._persistence.delete_vdc(dsuid)
+
+        logger.info(f"vDC {dsuid} deleted successfully")
+        return True
 
     # ===================================================================
     # Additional Message Handlers (Scene, Output, Device Management)

@@ -51,7 +51,6 @@ Usage:
 # Simple dimmer (one channel)
 dimmer = Output(
     vdsd=device,
-    output_id=0,
     output_function="dimmer",
     output_mode="gradual"
 )
@@ -66,7 +65,6 @@ dimmer.add_channel(OutputChannel(
 # Color light (three channels)
 color_light = Output(
     vdsd=device,
-    output_id=0,
     output_function="colordimmer",
     output_mode="gradual"
 )
@@ -134,7 +132,6 @@ class Output:
 
     Attributes:
         vdsd: Parent device
-        output_id: Output identifier
         output_function: Function type
         output_mode: Operating mode
         channels: Dictionary of channels by type
@@ -143,17 +140,18 @@ class Output:
     def __init__(
         self,
         vdsd: "VdSD",
-        output_id: int,
         output_function: str = "dimmer",
         output_mode: str = "gradual",
         push_changes: bool = True,
     ):
         """
         Initialize output.
+        
+        Per vDC API specification, a device has maximum ONE output.
+        Therefore, output_id is not needed.
 
         Args:
             vdsd: Parent VdSD device
-            output_id: Unique output identifier
             output_function: Type of output:
                            - "dimmer": Simple dimmable light
                            - "colordimmer": RGB/HSV color light
@@ -174,7 +172,6 @@ class Output:
             # Simple dimmer
             dimmer = Output(
                 vdsd=device,
-                output_id=0,
                 output_function="dimmer",
                 output_mode="gradual"
             )
@@ -182,7 +179,6 @@ class Output:
             # Color light
             rgb_light = Output(
                 vdsd=device,
-                output_id=0,
                 output_function="colordimmer",
                 output_mode="gradual",
                 push_changes=True
@@ -191,21 +187,101 @@ class Output:
             # Binary switch (on/off only)
             switch = Output(
                 vdsd=device,
-                output_id=0,
                 output_function="switch",
                 output_mode="binary"
             )
         """
         self.vdsd = vdsd
-        self.output_id = output_id
         self.output_function = output_function
         self.output_mode = output_mode
         self.push_changes = push_changes
 
+        # Description properties (API section 4.8.1) - read-only, invariable
+        self.default_group = 1  # Default to light group
+        self.name = f"{vdsd.name} Output" if hasattr(vdsd, 'name') else "Output"
+        self.function = self._map_function_to_enum(output_function)
+        self.output_usage = 0  # 0=undefined, 1=room, 2=outdoors, 3=user
+        self.variable_ramp = True  # Most outputs support variable ramps
+
+        # Settings properties (API section 4.8.2) - configurable from DSS
+        self.active_group = self.default_group  # Active dS group
+        self.groups: Dict[int, bool] = {self.default_group: True}  # Multi-group membership
+        # Note: output_mode and push_changes are also settings (already defined above)
+        
+        # Light output settings
+        self.on_threshold = 50.0  # Minimum brightness to switch on (0-100%)
+        self.min_brightness = 0.0  # Minimum supported brightness (0-100%)
+        self.dim_time_up = 0  # Dim up time in dS 8-bit format
+        self.dim_time_down = 0  # Dim down time in dS 8-bit format
+        self.dim_time_up_alt1 = 0  # Alternate 1 dim up time
+        self.dim_time_down_alt1 = 0  # Alternate 1 dim down time
+        self.dim_time_up_alt2 = 0  # Alternate 2 dim up time
+        self.dim_time_down_alt2 = 0  # Alternate 2 dim down time
+        
+        # Climate control settings
+        self.heating_system_capability = 0  # 0=undefined, 1=heating, 2=cooling, 3=both
+        self.heating_system_type = 0  # 0=undefined, 1=floor, 2=radiator, etc.
+
         # Channel storage: channel_type -> OutputChannel
         self.channels: Dict[DSChannelType, OutputChannel] = {}
 
-        logger.debug(f"Created output: id={output_id}, function={output_function}, " f"mode={output_mode}")
+        logger.debug(f"Created output: function={output_function}, mode={output_mode}")
+
+    def _map_function_to_enum(self, func_str: str) -> int:
+        """
+        Map output function string to API enum value.
+        
+        Per API section 4.8.1, function values are:
+        0: on/off only
+        1: dimmer
+        2: positional (e.g. valves, blinds)
+        3: dimmer with color temperature
+        4: full color dimmer
+        5: bipolar (heating/cooling)
+        6: internally controlled
+        
+        Args:
+            func_str: Function type string
+            
+        Returns:
+            Integer enum value per API specification
+        """
+        mapping = {
+            "switch": 0,
+            "dimmer": 1,
+            "positional": 2,
+            "ctdimmer": 3,
+            "colordimmer": 4,
+            "bipolar": 5,
+            "internal": 6,
+            "heating": 5,  # Alias for bipolar
+            "cooling": 5,  # Alias for bipolar
+        }
+        return mapping.get(func_str.lower(), 1)  # Default to dimmer
+
+    def _map_mode_to_enum(self, mode_str: str) -> int:
+        """
+        Map output mode string to API enum value.
+        
+        Per API section 4.8.2, mode values are:
+        0: disabled
+        1: binary
+        2: gradual
+        127: default
+        
+        Args:
+            mode_str: Mode string
+            
+        Returns:
+            Integer enum value
+        """
+        mapping = {
+            "disabled": 0,
+            "binary": 1,
+            "gradual": 2,
+            "default": 127,
+        }
+        return mapping.get(mode_str.lower(), 127)  # Default to default mode
 
     def add_channel(self, channel: OutputChannel) -> None:
         """
@@ -215,7 +291,7 @@ class Output:
             channel: OutputChannel to add
 
         Example:
-            output = Output(vdsd=device, output_id=0)
+            output = Output(vdsd=device)
 
             brightness = OutputChannel(
                 vdsd=device,
@@ -234,11 +310,11 @@ class Output:
         channel_type = channel.channel_type
 
         if channel_type in self.channels:
-            logger.warning(f"Output {self.output_id} already has channel {channel_type}, " f"replacing")
+            logger.warning(f"Output already has channel {channel_type}, replacing")
 
         self.channels[channel_type] = channel
 
-        logger.debug(f"Added channel {channel_type} to output {self.output_id}")
+        logger.debug(f"Added channel {channel_type} to output")
 
     def get_channel(self, channel_type: DSChannelType) -> Optional[OutputChannel]:
         """
@@ -281,12 +357,12 @@ class Output:
         """
         channel = self.channels.get(channel_type)
         if not channel:
-            logger.warning(f"Output {self.output_id} has no channel {channel_type}")
+            logger.warning(f"Output has no channel {channel_type}")
             return False
 
         # Check if output is disabled
         if self.output_mode == "disabled":
-            logger.warning(f"Output {self.output_id} is disabled, ignoring set request")
+            logger.warning(f"Output is disabled, ignoring set request")
             return False
 
         # For binary mode, snap to 0 or max
@@ -364,7 +440,7 @@ class Output:
         old_mode = self.output_mode
         self.output_mode = mode
 
-        logger.info(f"Output {self.output_id} mode changed: {old_mode} → {mode}")
+        logger.info(f"Output mode changed: {old_mode} → {mode}")
 
     def apply_scene_values(
         self, scene_values: Dict[DSChannelType, float], effect: Optional[int] = None, mode: str = "normal"
@@ -395,14 +471,14 @@ class Output:
             output.apply_scene_values(scene, mode='min')
         """
         if self.output_mode == "disabled":
-            logger.warning(f"Output {self.output_id} is disabled, ignoring scene")
+            logger.warning(f"Output is disabled, ignoring scene")
             return
 
         for channel_type, scene_value in scene_values.items():
             # In 'min' mode, only apply if scene value is higher
             if mode == "min":
                 channel = self.channels.get(channel_type)
-                if channel and channel.value >= scene_value:
+                if channel and channel.get_value() >= scene_value:
                     # Current value is already higher, skip
                     continue
 
@@ -411,40 +487,129 @@ class Output:
             self.set_channel_value(channel_type, scene_value)
 
         logger.info(
-            f"Output {self.output_id} applied scene with {len(scene_values)} values " f"(effect={effect}, mode={mode})"
+            f"Output applied scene with {len(scene_values)} values (effect={effect}, mode={mode})"
         )
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert output to dictionary for property tree.
 
+        Returns API-compliant structure per section 4.8 with:
+        - description: Invariable output properties
+        - settings: Persistent configuration
+        - state: Current dynamic state
+        - channels: List of output channels
+
         Returns:
             Dictionary representation of output
         """
-        # Export channels as a list (configuration format expected by configure())
+        # Export channels as a list
         channels = [channel.to_dict() for channel in self.channels.values()]
 
         return {
-            "outputID": self.output_id,
+            # Description properties (section 4.8.1) - read-only, invariable
+            "description": {
+                "defaultGroup": self.default_group,
+                "name": self.name,
+                "function": self.function,
+                "outputUsage": self.output_usage,
+                "variableRamp": self.variable_ramp,
+            },
+            # Settings properties (section 4.8.2) - configurable, persistent
+            "settings": {
+                "activeGroup": self.active_group,
+                "groups": self.groups,
+                "mode": self._map_mode_to_enum(self.output_mode),
+                "pushChanges": self.push_changes,
+                # Light settings
+                "onThreshold": self.on_threshold,
+                "minBrightness": self.min_brightness,
+                "dimTimeUp": self.dim_time_up,
+                "dimTimeDown": self.dim_time_down,
+                "dimTimeUpAlt1": self.dim_time_up_alt1,
+                "dimTimeDownAlt1": self.dim_time_down_alt1,
+                "dimTimeUpAlt2": self.dim_time_up_alt2,
+                "dimTimeDownAlt2": self.dim_time_down_alt2,
+                # Climate control settings
+                "heatingSystemCapability": self.heating_system_capability,
+                "heatingSystemType": self.heating_system_type,
+            },
+            # State properties (section 4.8.3) - dynamic
+            "state": {
+                "error": 0,  # 0=ok
+            },
+            # Channels
+            "channels": channels,
+            # Legacy compatibility
             "outputFunction": self.output_function,
             "outputMode": self.output_mode,
-            "pushChanges": self.push_changes,
-            "channels": channels,
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
         """
         Update output configuration from dictionary.
+        
+        Handles settings updates from DSS (API section 4.8.2).
 
         Args:
             data: Dictionary with output properties
         """
+        # Legacy top-level properties
         if "outputFunction" in data:
             self.output_function = data["outputFunction"]
         if "outputMode" in data:
             self.output_mode = data["outputMode"]
         if "pushChanges" in data:
             self.push_changes = data["pushChanges"]
+
+        # Settings properties (section 4.8.2) - DSS → Device (Pattern B)
+        # Accept settings nested or top-level
+        settings = data.get("settings", data)
+        
+        if "activeGroup" in settings:
+            self.active_group = settings["activeGroup"]
+            logger.info(f"Output activeGroup set to {self.active_group}")
+        
+        if "groups" in settings:
+            self.groups = settings["groups"]
+            logger.info(f"Output groups updated: {self.groups}")
+        
+        if "mode" in settings:
+            # Handle both enum and string
+            mode_val = settings["mode"]
+            if isinstance(mode_val, int):
+                mode_map = {0: "disabled", 1: "binary", 2: "gradual", 127: "gradual"}
+                self.output_mode = mode_map.get(mode_val, "gradual")
+            else:
+                self.output_mode = mode_val
+            logger.info(f"Output mode set to {self.output_mode}")
+        
+        if "pushChanges" in settings:
+            self.push_changes = settings["pushChanges"]
+        
+        # Light settings
+        if "onThreshold" in settings:
+            self.on_threshold = settings["onThreshold"]
+        if "minBrightness" in settings:
+            self.min_brightness = settings["minBrightness"]
+        if "dimTimeUp" in settings:
+            self.dim_time_up = settings["dimTimeUp"]
+        if "dimTimeDown" in settings:
+            self.dim_time_down = settings["dimTimeDown"]
+        if "dimTimeUpAlt1" in settings:
+            self.dim_time_up_alt1 = settings["dimTimeUpAlt1"]
+        if "dimTimeDownAlt1" in settings:
+            self.dim_time_down_alt1 = settings["dimTimeDownAlt1"]
+        if "dimTimeUpAlt2" in settings:
+            self.dim_time_up_alt2 = settings["dimTimeUpAlt2"]
+        if "dimTimeDownAlt2" in settings:
+            self.dim_time_down_alt2 = settings["dimTimeDownAlt2"]
+        
+        # Climate control settings
+        if "heatingSystemCapability" in settings:
+            self.heating_system_capability = settings["heatingSystemCapability"]
+        if "heatingSystemType" in settings:
+            self.heating_system_type = settings["heatingSystemType"]
 
         # Update channel configurations
         if "channels" in data:
@@ -486,7 +651,7 @@ class Output:
     def __repr__(self) -> str:
         """String representation of output."""
         return (
-            f"Output(id={self.output_id}, "
+            f"Output("
             f"function={self.output_function}, "
             f"mode={self.output_mode}, "
             f"channels={len(self.channels)})"
@@ -585,4 +750,4 @@ class Output:
         """
         # Notify parent device if it has a callback
         if hasattr(self.vdsd, "_on_output_change"):
-            self.vdsd._on_output_change(self.output_id, channel_type, value)
+            self.vdsd._on_output_change(channel_type, value)

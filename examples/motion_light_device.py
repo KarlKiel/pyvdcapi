@@ -20,8 +20,8 @@ This showcases the component system working together.
 import asyncio
 import logging
 from pyvdcapi.entities.vdc_host import VdcHost
-from pyvdcapi.components import Output, OutputChannel, Button, BinaryInput, Sensor
-from pyvdcapi.core.constants import DSGroup, DSChannelType, ButtonEvent
+from pyvdcapi.components import ButtonInput, DSButtonStateMachine, BinaryInput, Sensor
+from pyvdcapi.core.constants import DSGroup, DSChannelType
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -76,20 +76,17 @@ async def main():
     hardware = HardwareInterface()
 
     # ═══════════════════════════════════════════════════════════
-    # Component 1: Output with Brightness Channel
+    # Component 1: Output with Brightness Channel (using add_output_channel)
     # ═══════════════════════════════════════════════════════════
 
-    # Create output container
-    main_output = Output(vdsd=device, output_id=0, output_function="dimmer", output_mode="gradual", push_changes=True)
-
-    # Create brightness channel
-    brightness = OutputChannel(
-        vdsd=device,
+    # Add brightness channel (creates single output automatically per API spec)
+    brightness = device.add_output_channel(
         channel_type=DSChannelType.BRIGHTNESS,
-        name="Main Light",
         min_value=0.0,
         max_value=100.0,
-        default_value=0.0,
+        initial_value=0.0,
+        output_function="dimmer",
+        output_mode="gradual"
     )
 
     # Connect to hardware
@@ -99,23 +96,20 @@ async def main():
 
     brightness.on_hardware_change(update_hardware_brightness)
 
-    # Add channel to output
-    main_output.add_channel(brightness)
-
-    # Add output to device (not just the channel)
-    # device.add_output(main_output)  # This would be the proper way
-
     # ═══════════════════════════════════════════════════════════
     # Component 2: Button (Wall Switch)
     # ═══════════════════════════════════════════════════════════
 
-    wall_switch = Button(vdsd=device, name="Wall Switch", button_type="toggle", element=0)
+    # Create button input with state machine for timing
+    wall_switch = device.add_button_input(name="Wall Switch", button_type=1)
+    state_machine = DSButtonStateMachine(wall_switch, enable_tip_to_click=True)
 
-    def handle_button_event(button_id: int, event_type: ButtonEvent):
-        """Handle wall switch events."""
-        logger.info(f"Wall switch: {event_type}")
+    # Simple callback to handle button events
+    def handle_button_click(click_type: int):
+        """Handle wall switch button events."""
+        logger.info(f"Wall switch clickType: {click_type}")
 
-        if event_type == ButtonEvent.SINGLE_PRESS:
+        if click_type == 0:  # tip_1x (single tap)
             # Toggle light
             current = brightness.get_value()
             if current > 0:
@@ -125,20 +119,20 @@ async def main():
                 brightness.set_value(100.0)  # Turn on full
                 hardware.manual_override = True
 
-        elif event_type == ButtonEvent.LONG_PRESS:
-            # Start dimming
-            logger.info("Long press: Start dimming")
-            # Could implement smooth dimming here
-
-        elif event_type == ButtonEvent.DOUBLE_PRESS:
+        elif click_type == 4:  # hold_start (long press)
             # Set to 50%
+            logger.info("Long press: Set to 50%")
             brightness.set_value(50.0)
             hardware.manual_override = True
 
-    wall_switch.on_event(handle_button_event)
+        elif click_type == 1:  # tip_2x (double tap)
+            # Set to 75%
+            logger.info("Double tap: Set to 75%")
+            brightness.set_value(75.0)
+            hardware.manual_override = True
 
-    # Add to device
-    device.add_button(wall_switch)
+    # Note: In real hardware, connect state_machine.on_press() and on_release()
+    # to GPIO callbacks. For this example, we'll trigger manually.
 
     # ═══════════════════════════════════════════════════════════
     # Component 3: Binary Input (Motion Detector)

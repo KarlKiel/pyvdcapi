@@ -65,14 +65,14 @@ async def main():
     # 1. Dimmable light
     light1 = vdc.create_vdsd(name="Living Room Light", model="Dimmable LED", primary_group=DSGroup.YELLOW)  # Light
     light1.add_output_channel(
-        output_id=0, channel_type=DSChannelType.BRIGHTNESS, min_value=0.0, max_value=100.0, initial_value=50.0
+        channel_type=DSChannelType.BRIGHTNESS, min_value=0.0, max_value=100.0, initial_value=50.0
     )
     devices.append(light1)
 
     # 2. On/Off light
     light2 = vdc.create_vdsd(name="Kitchen Light", model="On/Off Switch", primary_group=DSGroup.YELLOW)
     light2.add_output_channel(
-        output_id=0, channel_type=DSChannelType.BRIGHTNESS, min_value=0.0, max_value=100.0, initial_value=0.0
+        channel_type=DSChannelType.BRIGHTNESS, min_value=0.0, max_value=100.0, initial_value=0.0
     )
     devices.append(light2)
 
@@ -93,10 +93,10 @@ async def main():
 
     # 4. Button input
     button = vdc.create_vdsd(name="Wall Switch", model="Button Input", primary_group=DSGroup.BLACK)
-    button.add_button(
+    button.add_button_input(
         button_id=0,
-        button_type=1,  # Single button
-        element=0,
+        button_type=1,  # Single pushbutton
+        button_element_id=0,
         group=DSGroup.YELLOW,  # Controls lights
         mode=0,  # Standard mode
     )

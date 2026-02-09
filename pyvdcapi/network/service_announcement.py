@@ -6,6 +6,25 @@ This module provides mDNS/DNS-SD service announcement using either:
 - Avahi (Linux native daemon)
 
 The vDC host announces itself as _ds-vdc._tcp to allow vdSMs to discover it automatically.
+
+Usage Examples:
+
+    # Async usage (recommended for production):
+    announcer = ServiceAnnouncer(port=8444, dsuid="my-dsuid")
+    await announcer.start()
+    # ... run vDC host ...
+    await announcer.stop()
+
+    # Sync usage (for tests or simple scripts):
+    announcer = ServiceAnnouncer(port=8444, dsuid="my-dsuid")
+    announcer.start_sync()
+    # ... run tests ...
+    announcer.stop_sync()
+
+    # Context manager (sync only, not from within async event loop):
+    with ServiceAnnouncer(port=8444, dsuid="my-dsuid") as announcer:
+        # ... temporary announcement ...
+        pass
 """
 
 from __future__ import annotations
@@ -28,17 +47,25 @@ class ServiceAnnouncer:
     - Service Name: "digitalSTROM vDC host on <hostname>"
     - Port: The port the TCP server is listening on
 
-    Usage (async):
-        announcer = ServiceAnnouncer(port=8444, dsuid="my-dsuid", host_name="my-vdc-host")
+    Usage Patterns:
+
+        # 1. Async (recommended - use in async applications):
+        announcer = ServiceAnnouncer(port=8444, dsuid="my-dsuid")
         await announcer.start()
-        ...
+        # ... run vDC host server ...
         await announcer.stop()
 
-    Usage (sync convenience):
+        # 2. Sync (for tests or synchronous scripts):
+        announcer = ServiceAnnouncer(port=8444, dsuid="my-dsuid")
+        announcer.start_sync()
+        # ... run tests ...
+        announcer.stop_sync()
+
+        # 3. Context manager (sync only):
+        # WARNING: Do not use from within running asyncio event loop!
         with ServiceAnnouncer(port=8444, dsuid="my-dsuid") as announcer:
-            ...
-    Note: If using sync context manager from inside an already-running asyncio event loop,
-    an exception will be raised: prefer "async with" in that case.
+            # ... temporary announcement ...
+            pass
     """
 
     def __init__(

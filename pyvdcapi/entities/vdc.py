@@ -281,7 +281,9 @@ class Vdc:
             name: Human-readable device name (e.g., "Living Room Light")
             model: Device model identifier (e.g., "Hue White")
             primary_group: digitalSTROM group (color) - see DSGroup enum
-            model_uid: Unique model identifier (auto-generated from model if not provided)
+            model_uid: Unique model identifier. If not provided, auto-generated
+                from model name by converting to lowercase and replacing spaces/dots
+                with dashes. Example: "Hue White v2" → "hue-white-v2"
             model_version: Model version string (default: "1.0")
             **properties: Additional device properties
 
@@ -629,6 +631,8 @@ class Vdc:
         for vdsd in self._vdsds.values():
             message = vdsd.announce_to_vdsm()
             announcements.append(message)
+            # Mark device as announced to enforce immutability
+            vdsd.mark_announced()
 
         logger.debug(f"Created {len(announcements)} device announcements for vDC {self.dsuid}")
 
@@ -636,16 +640,19 @@ class Vdc:
 
     def _load_vdsds(self) -> None:
         """
-        Load persisted devices from YAML storage.
+        Load persisted devices from YAML storage and restore to vDC.
 
-        Called during vDC initialization to restore devices from
-        previous session. For each persisted device:
-        1. Read configuration from YAML
-        2. Create VdSD instance
-        3. Restore device state
-        4. Add to device collection
+        Called during vDC initialization to restore devices from previous session.
+        For each persisted device:
+        1. Read configuration from YAML persistence layer
+        2. Extract device properties (name, model, primaryGroup, etc.)
+        3. Create VdSD instance with persisted dSUID
+        4. Restore device state and control values
+        5. Add to device collection
 
-        This ensures devices persist across restarts.
+        This ensures devices persist across host restarts. The VdSD constructor
+        automatically reads its own persisted configuration including output
+        channels, buttons, sensors, and scene configurations.
         """
         # Get all vdSDs for this vDC from persistence
         vdsd_configs = self._persistence.get_vdsds_for_vdc(self.dsuid)

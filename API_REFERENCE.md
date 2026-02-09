@@ -56,7 +56,7 @@ async def main():
     device = vdc.create_vdsd(
         name="Ceiling Light",
         model="DimmableLED",
-        primary_group=DSGroup.LIGHT
+        primary_group=DSGroup.YELLOW  # Light group (Yellow=1)
     )
     
     # 4. Add output channel
@@ -67,8 +67,8 @@ async def main():
     )
     
     # 5. Register hardware callback
-    def apply_brightness(value):
-        print(f"Set hardware brightness to {value}%")
+    def apply_brightness(channel_type, value):
+        print(f"Set hardware channel {channel_type} brightness to {value}%")
         # your_hardware.set_brightness(value)
     
     brightness.subscribe(apply_brightness)
@@ -846,6 +846,263 @@ Get device properties.
 
 **Returns:** Property tree dictionary
 
+##### `configure(config: Dict[str, Any]) -> None`
+
+Bulk configure device with all capabilities from a configuration dictionary.
+
+**Use Cases:**
+- Loading device configuration from YAML persistence
+- Applying device templates or presets
+- Cloning device configurations
+- API-driven device setup and provisioning
+- Restoring device state after restart
+
+**Parameters:**
+- `config`: Configuration dictionary containing device capabilities
+
+**Configuration Structure:**
+
+```python
+{
+    'outputs': [
+        {
+            'outputID': int,                    # Output identifier
+            'outputFunction': str,              # 'dimmer', 'colordimmer', 'switch', etc.
+            'outputMode': str,                  # 'gradual', 'switched', 'disabled'
+            'pushChanges': bool,                # Auto-push changes to vdSM (default: True)
+            'channels': [
+                {
+                    'channelType': DSChannelType,   # Channel type constant
+                    'name': str,                    # Channel name
+                    'min': float,                   # Minimum value
+                    'max': float,                   # Maximum value
+                    'resolution': float,            # Value resolution (default: 0.1)
+                    'default': float                # Default/initial value
+                }
+            ]
+        }
+    ],
+    'buttons': [
+        {
+            'name': str,                        # Button name
+            'buttonType': str,                  # 'toggle', 'single', 'two-way', etc.
+            'element': int                      # Button element ID (default: 0)
+        }
+    ],
+    'binary_inputs': [
+        {
+            'name': str,                        # Input name
+            'inputType': str,                   # 'contact', 'motion', 'presence', etc.
+            'inputID': int,                     # Optional input ID
+            'invert': bool,                     # Invert logic (default: False)
+            'initialState': bool                # Initial state (default: False)
+        }
+    ],
+    'sensors': [
+        {
+            'name': str,                        # Sensor name
+            'sensorType': str,                  # 'temperature', 'humidity', 'illumination', etc.
+            'unit': str,                        # Unit of measurement ('°C', '%', 'lux', etc.)
+            'min': float,                       # Minimum value
+            'max': float,                       # Maximum value
+            'resolution': float,                # Value resolution (default: 0.1)
+            'initialValue': float               # Optional initial value
+        }
+    ],
+    'scenes': {
+        DSScene.PRESET_1: {                     # Scene number (can be int or DSScene enum)
+            'channels': {
+                DSChannelType.BRIGHTNESS: 75.0,  # Channel values by type
+                DSChannelType.HUE: 120.0,
+                DSChannelType.SATURATION: 80.0
+            },
+            'effect': DSSceneEffect.SMOOTH,      # Scene effect (default: SMOOTH)
+            'dontCare': False                    # Don't care flag (default: False)
+        }
+    },
+    'customActions': [
+        {
+            'name': str,                        # Action identifier
+            'title': str,                       # Display title
+            'action': str,                      # Action template string
+            'params': dict                      # Action parameters
+        }
+    ]
+}
+```
+
+**Examples:**
+
+```python
+# Example 1: Configure a complete RGB dimmable light
+rgb_light_config = {
+    'outputs': [{
+        'outputID': 0,
+        'outputFunction': 'colordimmer',
+        'outputMode': 'gradual',
+        'channels': [
+            {
+                'channelType': DSChannelType.BRIGHTNESS,
+                'name': 'Brightness',
+                'min': 0.0,
+                'max': 100.0,
+                'default': 0.0
+            },
+            {
+                'channelType': DSChannelType.HUE,
+                'name': 'Hue',
+                'min': 0.0,
+                'max': 360.0,
+                'default': 0.0
+            },
+            {
+                'channelType': DSChannelType.SATURATION,
+                'name': 'Saturation',
+                'min': 0.0,
+                'max': 100.0,
+                'default': 0.0
+            }
+        ]
+    }],
+    'buttons': [{
+        'name': 'Power Button',
+        'buttonType': 'toggle',
+        'element': 0
+    }],
+    'scenes': {
+        DSScene.PRESENT: {
+            'channels': {
+                DSChannelType.BRIGHTNESS: 75.0,
+                DSChannelType.HUE: 0.0,
+                DSChannelType.SATURATION: 0.0
+            },
+            'effect': DSSceneEffect.SMOOTH
+        },
+        DSScene.PRESET_1: {
+            'channels': {
+                DSChannelType.BRIGHTNESS: 100.0,
+                DSChannelType.HUE: 120.0,  # Green
+                DSChannelType.SATURATION: 100.0
+            },
+            'effect': DSSceneEffect.SMOOTH
+        }
+    }
+}
+
+device.configure(rgb_light_config)
+
+# Example 2: Configure a climate sensor with multiple inputs
+climate_sensor_config = {
+    'sensors': [
+        {
+            'sensorType': 'temperature',
+            'name': 'Room Temperature',
+            'unit': '°C',
+            'min': -40.0,
+            'max': 125.0,
+            'resolution': 0.1,
+            'initialValue': 21.5
+        },
+        {
+            'sensorType': 'humidity',
+            'name': 'Room Humidity',
+            'unit': '%',
+            'min': 0.0,
+            'max': 100.0,
+            'resolution': 0.5,
+            'initialValue': 45.0
+        },
+        {
+            'sensorType': 'co2',
+            'name': 'CO2 Concentration',
+            'unit': 'ppm',
+            'min': 0.0,
+            'max': 5000.0,
+            'resolution': 1.0
+        }
+    ],
+    'binary_inputs': [{
+        'name': 'Window Contact',
+        'inputType': 'contact',
+        'invert': False,
+        'initialState': False
+    }]
+}
+
+device.configure(climate_sensor_config)
+
+# Example 3: Configure motorized shade with position and angle
+shade_config = {
+    'outputs': [{
+        'outputID': 0,
+        'outputFunction': 'shade',
+        'outputMode': 'gradual',
+        'channels': [
+            {
+                'channelType': DSChannelType.SHADE_POSITION_OUTSIDE,
+                'name': 'Position',
+                'min': 0.0,    # Fully open
+                'max': 100.0,  # Fully closed
+                'resolution': 1.0,
+                'default': 0.0
+            },
+            {
+                'channelType': DSChannelType.SHADE_ANGLE_OUTSIDE,
+                'name': 'Slat Angle',
+                'min': 0.0,
+                'max': 100.0,
+                'resolution': 1.0,
+                'default': 50.0
+            }
+        ]
+    }],
+    'buttons': [
+        {
+            'name': 'Up Button',
+            'buttonType': 'single',
+            'element': 0
+        },
+        {
+            'name': 'Down Button',
+            'buttonType': 'single',
+            'element': 1
+        }
+    ],
+    'scenes': {
+        DSScene.PRESENT: {
+            'channels': {
+                DSChannelType.SHADE_POSITION_OUTSIDE: 0.0,  # Fully open
+                DSChannelType.SHADE_ANGLE_OUTSIDE: 0.0
+            }
+        },
+        DSScene.ABSENT: {
+            'channels': {
+                DSChannelType.SHADE_POSITION_OUTSIDE: 100.0,  # Fully closed
+                DSChannelType.SHADE_ANGLE_OUTSIDE: 100.0
+            }
+        }
+    }
+}
+
+device.configure(shade_config)
+
+# Example 4: Load from YAML file
+import yaml
+
+with open('device_template.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+
+device.configure(config)
+```
+
+**Notes:**
+- All configuration keys are optional - configure only what you need
+- Channels are automatically grouped into outputs
+- Scene numbers can be integers or DSScene enum values
+- Configuration is applied immediately - no need to call additional methods
+- Existing components are not removed - configure() adds new components
+- For complete device setup from scratch, configure immediately after creation
+
 ---
 
 ## Component Classes
@@ -923,19 +1180,19 @@ Update channel value from hardware (called by application).
 hardware.on_brightness_changed = lambda val: brightness.update_value(val)
 ```
 
-###### `subscribe(callback: Callable[[float], None]) -> None`
+###### `subscribe(callback: Callable[[int, float], None]) -> None`
 
 Register callback for value changes.
 
 **Parameters:**
-- `callback`: Function(value) called when vdSM sets value
+- `callback`: Function(channel_type, value) called when vdSM sets value
 
 **Example:**
 ```python
-def apply_brightness(value):
+def apply_brightness(channel_type, value):
     # Send to hardware
     hardware_driver.set_pwm(int(value * 2.55))  # 0-100 to 0-255
-    print(f"Applied: {value}%")
+    print(f\"Applied channel {channel_type}: {value}%\")
 
 brightness.subscribe(apply_brightness)
 ```

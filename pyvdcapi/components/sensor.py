@@ -231,10 +231,19 @@ class Sensor:
         else:
             self.sensor_id = sensor_id
 
+        # Description properties (API section 4.4.1) - read-only
+        self.ds_index = self.sensor_id  # Device sensor index (0..N-1)
+        self.sensor_usage = 0  # 0=undefined, 1=room, 2=outdoors, 3=user
+
         # Value range and precision
         self.min_value = min_value
         self.max_value = max_value
         self.resolution = resolution
+
+        # Settings properties (API section 4.4.2) - configurable from DSS
+        self.group = 0  # dS group number (0=undefined)
+        self.min_push_interval = 2.0  # Minimum seconds between push notifications
+        self.changes_only_interval = 0.0  # Minimum seconds between same-value pushes (0=push all)
 
         # Current state
         self._value: Optional[float] = initial_value
@@ -245,6 +254,10 @@ class Sensor:
         # Store last notified value to implement hysteresis
         self._last_notified_value: Optional[float] = initial_value
         self._hysteresis = 0.0  # Default: notify on any change
+        
+        # Push throttling state
+        self._last_push_time = 0.0  # When we last pushed to vdSM
+        self._last_pushed_value: Optional[float] = initial_value  # Last value we pushed
 
         # Observable for value changes
         # Subscribers receive: callback(sensor_id, value)
@@ -323,15 +336,53 @@ class Sensor:
             # Trigger callbacks
             self._change_observable.notify(self.sensor_id, rounded_value)
 
-            # TODO: Send sensor value notification to vdSM
-            # Note: vdSM typically polls sensor values rather than
-            # receiving notifications, but significant changes could
-            # trigger push notifications
-            # self.vdsd.send_sensor_notification(
-            #     self.sensor_id,
-            #     rounded_value,
-            #     self.unit
-            # )
+            # Send sensor value notification to vdSM with throttling
+            # Pattern A: Device → DSS (push notification on significant change)
+            # Implements API section 4.4.2 throttling settings
+            self._push_value_with_throttling(rounded_value)
+
+    def _push_value_with_throttling(self, value: float) -> None:
+        """
+        Push sensor value to vdSM with throttling per API settings.
+        
+        Implements API section 4.4.2 throttling:
+        - minPushInterval: Minimum time between any pushes
+        - changesOnlyInterval: Minimum time between pushes of same value
+        
+        Args:
+            value: Sensor value to push
+        """
+        current_time = time.time()
+        time_since_last_push = current_time - self._last_push_time
+        value_changed = (self._last_pushed_value is None or 
+                        abs(value - self._last_pushed_value) >= self.resolution)
+        
+        # Check minPushInterval throttling (applies to all pushes)
+        if time_since_last_push < self.min_push_interval:
+            logger.debug(
+                f"Sensor {self.sensor_id} push throttled by minPushInterval: "
+                f"{time_since_last_push:.2f}s < {self.min_push_interval}s"
+            )
+            return
+        
+        # Check changesOnlyInterval throttling (only for same-value pushes)
+        if not value_changed and self.changes_only_interval > 0:
+            if time_since_last_push < self.changes_only_interval:
+                logger.debug(
+                    f"Sensor {self.sensor_id} same-value push throttled: "
+                    f"{time_since_last_push:.2f}s < {self.changes_only_interval}s"
+                )
+                return
+        
+        # Throttling passed - send push notification
+        self.vdsd.push_sensor_value(self.sensor_id, value)
+        self._last_push_time = current_time
+        self._last_pushed_value = value
+        
+        logger.debug(
+            f"Sensor {self.sensor_id} pushed value {value} {self.unit} "
+            f"(changed={value_changed})"
+        )
 
     def set_error(self, error_message: str) -> None:
         """
@@ -373,17 +424,18 @@ class Sensor:
 
     def get_age(self) -> Optional[float]:
         """
-        Get age of current reading in milliseconds.
+        Get age of current reading in seconds.
 
         Indicates how fresh the data is. Stale data (high age) might
         indicate sensor is offline or not being polled.
+        Per vDC API spec section 4.4.3, age is returned in seconds.
 
         Returns:
-            Milliseconds since last update, or None if no reading
+            Seconds since last update, or None if no reading
         """
         if self._last_update_time is None:
             return None
-        return (time.time() - self._last_update_time) * 1000.0
+        return time.time() - self._last_update_time
 
     def has_error(self) -> bool:
         """
@@ -458,16 +510,28 @@ class Sensor:
         """
         Convert sensor to dictionary for property tree.
 
+        Returns API-compliant structure per section 4.4.
+
         Returns:
             Dictionary representation of sensor
         """
         result = {
-            "inputType": "sensor",
-            "sensorID": self.sensor_id,
-            "sensorType": self.sensor_type,
+            # Description properties (section 4.4.1) - read-only, invariable
             "name": self.name,
+            "dsIndex": self.ds_index,
+            "sensorType": self.sensor_type,
+            "sensorUsage": self.sensor_usage,
             "unit": self.unit,
             "resolution": self.resolution,
+            # Legacy compatibility
+            "inputType": "sensor",
+            "sensorID": self.sensor_id,
+            # Settings properties (section 4.4.2) - configurable
+            "settings": {
+                "group": self.group,
+                "minPushInterval": self.min_push_interval,
+                "changesOnlyInterval": self.changes_only_interval,
+            },
         }
 
         # Add value range if specified
@@ -476,7 +540,7 @@ class Sensor:
         if self.max_value is not None:
             result["max"] = self.max_value
 
-        # Add current state
+        # Add current state (section 4.4.3)
         if self._error:
             result["error"] = self._error
         elif self._value is not None:
@@ -488,10 +552,13 @@ class Sensor:
     def from_dict(self, data: Dict[str, Any]) -> None:
         """
         Update sensor configuration from dictionary.
+        
+        Handles settings updates from DSS (API section 4.4.2).
 
         Args:
             data: Dictionary with sensor properties
         """
+        # Description properties (mostly read-only, but allow updates)
         if "name" in data:
             self.name = data["name"]
         if "unit" in data:
@@ -502,6 +569,33 @@ class Sensor:
             self.min_value = data["min"]
         if "max" in data:
             self.max_value = data["max"]
+        
+        # Settings properties (section 4.4.2) - DSS → Device (Pattern B)
+        # Accept settings either nested or top-level
+        settings = data.get("settings", data)
+        
+        if "group" in settings:
+            old_group = self.group
+            self.group = settings["group"]
+            logger.info(
+                f"Sensor {self.sensor_id} group changed: {old_group} → {self.group}"
+            )
+        
+        if "minPushInterval" in settings:
+            old_interval = self.min_push_interval
+            self.min_push_interval = settings["minPushInterval"]
+            logger.info(
+                f"Sensor {self.sensor_id} minPushInterval changed: "
+                f"{old_interval}s → {self.min_push_interval}s"
+            )
+        
+        if "changesOnlyInterval" in settings:
+            old_interval = self.changes_only_interval
+            self.changes_only_interval = settings["changesOnlyInterval"]
+            logger.info(
+                f"Sensor {self.sensor_id} changesOnlyInterval changed: "
+                f"{old_interval}s → {self.changes_only_interval}s"
+            )
 
     def __repr__(self) -> str:
         """String representation of sensor."""

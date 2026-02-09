@@ -250,7 +250,7 @@ class YAMLPersistence:
 
     def delete_vdc(self, dsuid: str) -> bool:
         """
-        Delete vDC configuration.
+        Delete vDC configuration and all associated vdSDs.
 
         Args:
             dsuid: dSUID of the vDC
@@ -259,12 +259,27 @@ class YAMLPersistence:
             True if deleted, False if not found
         """
         with self._lock:
-            if dsuid in self._data.get("vdcs", {}):
-                del self._data["vdcs"][dsuid]
-                if self.auto_save:
-                    self.save()
-                return True
-            return False
+            if dsuid not in self._data.get("vdcs", {}):
+                return False
+            
+            # Delete the vDC
+            del self._data["vdcs"][dsuid]
+            
+            # Also delete all vdSDs belonging to this vDC
+            vdsds_to_delete = []
+            for vdsd_dsuid, vdsd_config in self._data.get("vdsds", {}).items():
+                if vdsd_config.get("vdc_dSUID") == dsuid:
+                    vdsds_to_delete.append(vdsd_dsuid)
+            
+            for vdsd_dsuid in vdsds_to_delete:
+                del self._data["vdsds"][vdsd_dsuid]
+            
+            if vdsds_to_delete:
+                logger.info(f"Deleted vDC {dsuid} and {len(vdsds_to_delete)} associated vdSDs")
+            
+            if self.auto_save:
+                self.save()
+            return True
 
     def get_all_vdcs(self) -> Dict[str, Dict[str, Any]]:
         """

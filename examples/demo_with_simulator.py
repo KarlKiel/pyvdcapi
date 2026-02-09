@@ -74,10 +74,9 @@ async def create_demo_setup():
     )
 
     # Add on/off button
-    living_room_light.add_button(
-        button_type=0,  # Single press
-        name="Main Switch",
-        on_click=lambda: logger.info("Living room light button clicked!"),
+    living_room_light.add_button_input(
+        button_type=1,  # Single pushbutton
+        name="Main Switch"
     )
 
     logger.info("  ✓ Living Room Ceiling Light (dimmable)")
@@ -125,9 +124,9 @@ async def create_demo_setup():
     # Add humidity sensor
     kitchen_sensor.add_sensor(sensor_type="humidity", name="Humidity", unit="%", min_value=0.0, max_value=100.0)
 
-    # Add motion sensor (binary input)
-    kitchen_sensor.add_button(
-        button_type=0, name="Motion Detector", on_click=lambda: logger.info("Motion detected in kitchen!")
+    # Add motion detector button
+    kitchen_sensor.add_button_input(
+        button_type=1, name="Motion Detector"
     )
 
     logger.info("  ✓ Kitchen Multisensor (temp, humidity, motion)")

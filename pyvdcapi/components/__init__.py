@@ -4,13 +4,16 @@ Device components for vDC API devices.
 This module provides the building blocks for virtual devices (vdSDs):
 
 Inputs (Device → vdSM):
-- Button: User interaction events (press, release, long press, double press)
+- ButtonInput: User interaction events with API-compliant clickType values
 - BinaryInput: Contact closure, motion detection, presence sensors
 - Sensor: Continuous value readings (temperature, humidity, power, etc.)
 
 Outputs (vdSM → Device):
 - Output: Container for output channels with configuration
 - OutputChannel: Individual controllable aspects (brightness, hue, saturation, etc.)
+
+Helpers:
+- DSButtonStateMachine: Optional timing-based clickType detection for simple buttons
 
 These components attach to vdSDs and provide:
 - State tracking and persistence
@@ -24,11 +27,11 @@ Component Architecture:
 ├─────────────────────────────────────────────────────────┤
 │ Inputs:                      Outputs:                   │
 │ ┌──────────┐  ┌──────────┐  ┌───────────────────────┐ │
-│ │ Button 1 │  │BinaryIn 1│  │ Output 0              │ │
+│ │ButtonInp1│  │BinaryIn 1│  │ Output 0              │ │
 │ │ (Toggle) │  │ (Motion) │  │  ├─ Brightness Ch.    │ │
 │ └──────────┘  └──────────┘  │  ├─ Hue Ch.           │ │
 │ ┌──────────┐  ┌──────────┐  │  └─ Saturation Ch.   │ │
-│ │ Button 2 │  │ Sensor 1 │  └───────────────────────┘ │
+│ │ButtonInp2│  │ Sensor 1 │  └───────────────────────┘ │
 │ │ (Dimmer) │  │  (Temp)  │                            │
 │ └──────────┘  └──────────┘                            │
 └─────────────────────────────────────────────────────────┘
@@ -46,7 +49,8 @@ Each component:
 
 from .output import Output
 from .output_channel import OutputChannel
-from .button import Button
+from .button_input import ButtonInput
+from .button_state_machine import DSButtonStateMachine
 from .binary_input import BinaryInput
 from .sensor import Sensor
 from .actions import ActionManager, StateManager, DevicePropertyManager, ActionParameter
@@ -54,7 +58,8 @@ from .actions import ActionManager, StateManager, DevicePropertyManager, ActionP
 __all__ = [
     "Output",
     "OutputChannel",
-    "Button",
+    "ButtonInput",
+    "DSButtonStateMachine",
     "BinaryInput",
     "Sensor",
     "ActionManager",

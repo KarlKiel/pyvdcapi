@@ -70,19 +70,28 @@ This document outlines the complete architecture for the Python vDC API implemen
 ```python
 class VdcHost:
     def __init__(self, port: int, mac_address: str, persistence_file: str, **properties)
-    def start(self) -> None  # Start TCP server
-    def stop(self) -> None   # Stop TCP server
-    def create_vdc(self, **properties) -> Vdc
-    def delete_vdc(self, dsuid: str) -> bool
+    async def start(self) -> None  # Start TCP server
+    async def stop(self) -> None   # Stop TCP server
+    def create_vdc(
+        self,
+        name: str,
+        model: str,
+        model_uid: Optional[str] = None,
+        model_version: str = "1.0",
+        **properties
+    ) -> Vdc
     def get_vdc(self, dsuid: str) -> Optional[Vdc]
     def get_all_vdcs(self) -> List[Vdc]
+    def delete_vdc(self, dsuid: str) -> bool
     
-    # Internal message handlers
-    async def _handle_hello(self, request: vdsm_RequestHello) -> vdc_ResponseHello
-    async def _handle_bye(self, request: vdsm_SendBye) -> GenericResponse
-    async def _handle_get_property(self, request: vdsm_RequestGetProperty) -> vdc_ResponseGetProperty
-    async def _handle_set_property(self, request: vdsm_RequestSetProperty) -> GenericResponse
-    async def _handle_ping(self, request: vdsm_SendPing) -> None  # Send pong
+    # Internal message handlers (called by MessageRouter)
+    # All handlers accept Message objects and return Optional[Message]
+    async def _handle_hello(self, message: Message) -> Optional[Message]
+    async def _handle_bye(self, message: Message) -> Optional[Message]
+    async def _handle_ping(self, message: Message) -> Optional[Message]
+    async def _handle_get_property(self, message: Message) -> Optional[Message]
+    async def _handle_set_property(self, message: Message) -> Optional[Message]
+    async def _handle_generic_request(self, message: Message, session: VdSMSession) -> Message
 ```
 
 **State:**
@@ -107,15 +116,23 @@ class VdcHost:
 **Key Methods:**
 ```python
 class TCPServer:
-    def __init__(self, host: str, port: int, message_handler: Callable)
+    def __init__(
+        self,
+        port: int = 8444,
+        message_handler: Optional[Callable[[Message, asyncio.StreamWriter], Awaitable[None]]] = None,
+        host: str = "0.0.0.0"
+    )
     async def start(self) -> None
     async def stop(self) -> None
-    async def send_message(self, message: pb.Message) -> None
+    
+    # Static method for sending messages
+    @staticmethod
+    async def send_message(writer: asyncio.StreamWriter, message: Message) -> None
     
     # Internal
     async def _handle_connection(self, reader, writer) -> None
-    async def _read_message(self, reader) -> pb.Message
-    async def _write_message(self, writer, message: pb.Message) -> None
+    async def _read_message(self, reader) -> Message
+    async def _write_message(self, writer, message: Message) -> None
 ```
 
 **Message Format:**

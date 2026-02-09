@@ -2,6 +2,14 @@
 
 Python implementation of the digitalSTROM vDC API - A comprehensive library for building virtual device connectors (vDCs) and virtual devices (vdSDs).
 
+## 📚 Documentation
+
+- **[SUMMARY.md](SUMMARY.md)** - Quick start guide for new developers
+- **[API_REFERENCE.md](API_REFERENCE.md)** - Complete API documentation
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design
+- **[DOCUMENTATION_REVIEW.md](DOCUMENTATION_REVIEW.md)** - Comprehensive code review and status
+- **[ISSUES.md](ISSUES.md)** - Known issues and enhancement tracker
+
 ## Features
 
 ✅ **Complete Protocol Implementation** - All 19 message handlers from genericVDC.proto  
@@ -55,7 +63,7 @@ async def main():
     device = vdc.create_vdsd(
         name="Living Room Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW  # Light group
+        primary_group=DSGroup.YELLOW  # Light group (Yellow=1)
     )
     
     # Add brightness channel

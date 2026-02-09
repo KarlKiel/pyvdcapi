@@ -2,8 +2,13 @@ from pyvdcapi.components.sensor import Sensor
 
 
 def test_sensor_update_and_hysteresis():
+    class DummyVdSD:
+        def push_sensor_value(self, sensor_id, value):
+            """Mock push notification method."""
+            pass
+    
     s = Sensor(
-        vdsd=None,
+        vdsd=DummyVdSD(),
         name="Temp",
         sensor_type="temperature",
         unit="C",

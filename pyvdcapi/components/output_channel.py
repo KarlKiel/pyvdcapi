@@ -69,10 +69,10 @@ brightness = OutputChannel(
 )
 
 # Set up hardware callback
-def apply_brightness(value):
+def apply_brightness(channel_type, value):
     # Send to actual hardware
     hardware_driver.set_pwm(value / 100.0)
-    print(f"Applied brightness: {value}%")
+    print(f\"Applied channel {channel_type} brightness: {value}%\")
 
 brightness.subscribe(apply_brightness)
 
@@ -333,11 +333,14 @@ class OutputChannel:
 
             logger.debug(f"Channel {self.name} updated from hardware: " f"{old_value} → {validated_value}")
 
-            # TODO: Send notification to vdSM about state change
-            # self.vdsd.send_property_changed_notification(
-            #     f"outputs.{self.ds_index}.value",
-            #     validated_value
-            # )
+            # Send notification to vdSM about hardware state change
+            # Pattern C (Bidirectional): Device → DSS direction
+            # CRITICAL: This is ONLY called from update_value() (hardware changes)
+            #           NOT from set_value() (DSS commands) to avoid echo
+            self.vdsd.push_output_channel_value(
+                self.ds_index,
+                validated_value
+            )
 
         # Always update timestamp even if value unchanged
         self._last_update = time.time()
@@ -353,15 +356,16 @@ class OutputChannel:
 
     def get_age(self) -> float:
         """
-        Get age of current value in milliseconds.
+        Get age of current value in seconds.
 
         Age indicates how long ago the value was last updated.
         Used by vdSM to determine data freshness.
+        Per vDC API spec section 4.9.2, age is returned in seconds.
 
         Returns:
-            Milliseconds since last update
+            Seconds since last update
         """
-        return (time.time() - self._last_update) * 1000.0
+        return time.time() - self._last_update
 
     def subscribe(self, callback: Callable[[int, float], None]) -> None:
         """

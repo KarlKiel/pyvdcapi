@@ -126,7 +126,7 @@ def validate_complex_device_creation(vdc):
 
     # Add button
     logger.info("\n2.3 Adding button input...")
-    button = device.add_button(name="Toggle Button", button_type=0)  # Single press
+    button = device.add_button_input(name="Toggle Button", button_type=1)  # Single pushbutton
     logger.info(f"✓ Button created: id={button.button_id}, name='{button.name}'")
 
     # Add sensor
@@ -163,7 +163,7 @@ def validate_property_tree(device):
     logger.info(f"  - displayId: '{props_dict.get('displayId', 'MISSING')}'")
     logger.info(f"  - primaryGroup: {props_dict.get('primaryGroup', 'MISSING')}")
     logger.info(f"  - modelFeatures: {props_dict.get('modelFeatures', {})}")
-    logger.info(f"  - outputs: {len(props_dict.get('outputs', []))} output(s)")
+    logger.info(f"  - output: {'present' if 'output' in props_dict else 'none'}")
     logger.info(f"  - inputs: {len(props_dict.get('inputs', []))} input(s)")
 
     # Critical validations for vdSM announcement

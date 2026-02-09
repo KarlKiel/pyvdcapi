@@ -82,8 +82,7 @@ Usage Example:
 dimmer = vdc.create_vdsd(
     name="Living Room Dimmer",
     model="Dimmer 1CH",
-    primary_group=DSGroup.YELLOW,
-    output_function=DSOutputFunction.DIMMER
+    primary_group=DSGroup.YELLOW  # Yellow group = Light (value 1)
 )
 
 # Add output channel
@@ -96,10 +95,10 @@ dimmer.add_output_channel(
 )
 
 # Add button input
-dimmer.add_button(
+dimmer.add_button_input(
     name="Toggle Button",
-    button_type=0,  # Single press
-    on_press=lambda: dimmer.toggle_output()
+    button_type=1,  # Single pushbutton
+    button_element_id=0
 )
 
 # Configure scenes
@@ -107,11 +106,11 @@ dimmer.set_scene(DSScene.PRESENT, {
     DSChannelType.BRIGHTNESS: 75.0
 }, effect=DSSceneEffect.SMOOTH)
 
-# Set up hardware callback
+# Set up hardware callback (receives channel_type and value)
 def apply_to_hardware(channel_type, value):
     # Send to actual hardware
     hardware.set_brightness(value)
-    print(f"Applied brightness: {value}%")
+    print(f"Applied channel {channel_type} brightness: {value}%")
 
 dimmer.on_output_change(apply_to_hardware)
 ```
@@ -137,7 +136,7 @@ if TYPE_CHECKING:
     from ..entities.vdc import Vdc
     from ..components.output import Output
     from ..components.output_channel import OutputChannel
-    from ..components.button import Button
+    from ..components.button_input import ButtonInput
     from ..components.binary_input import BinaryInput
     from ..components.sensor import Sensor
 
@@ -301,11 +300,13 @@ class VdSD:
 
         # Device components
         # These will hold the actual input/output/scene components
-        self._outputs: Dict[int, "Output"] = {}  # outputID -> Output (contains OutputChannels)
-        self._buttons: List["Button"] = []
+        # Per vDC API: Device has maximum ONE output (but can have multiple channels)
+        self._output: Optional["Output"] = None  # Single output (not a dict)
+        self._button_inputs: List["ButtonInput"] = []  # API-compliant button inputs
         self._binary_inputs: List["BinaryInput"] = []
         self._sensors: List["Sensor"] = []
         self._scenes: Dict[int, Dict] = {}  # sceneNo -> scene config
+        self._local_priority_scene: Optional[int] = None  # Local priority scene lock
 
         # Actions and States managers
         from ..components.actions import ActionManager, StateManager, DevicePropertyManager
@@ -326,12 +327,17 @@ class VdSD:
 
         # State tracking
         self._active = vdsd_config.get("active", True)
+        self._announced = False  # Track if device has been announced to vdSM
 
         logger.info(f"vdSD initialized: name='{name}', " f"model='{model}', " f"group={primary_group}")
 
     def configure(self, config: Dict[str, Any]) -> None:
         """
         Configure device with all capabilities from a configuration dictionary.
+
+        IMPORTANT: Per vDC API specification, device structure is immutable after
+        announcement to vdSM. This method will raise RuntimeError if called after
+        the device has been announced. Always configure devices before announcement.
 
         This method allows bulk configuration of a device after creation,
         useful for:
@@ -342,8 +348,8 @@ class VdSD:
 
         Args:
             config: Configuration dictionary containing:
-                - outputs: List of output configurations
-                - buttons: List of button configurations
+                - output: Output configuration (single, not list - per API spec)
+                - button_inputs: List of button input configurations
                 - binary_inputs: List of binary input configurations
                 - sensors: List of sensor configurations
                 - scenes: Dictionary of scene configurations
@@ -354,8 +360,7 @@ class VdSD:
         Example:
             # Configure a complete RGB light
             device.configure({
-                'outputs': [{
-                    'outputID': 0,
+                'output': {
                     'outputFunction': 'colordimmer',
                     'outputMode': 'gradual',
                     'channels': [
@@ -406,49 +411,54 @@ class VdSD:
                 }
             })
         """
-        from ..components import Output, OutputChannel, Button, BinaryInput, Sensor
+        if self._announced:
+            raise RuntimeError(
+                f"Cannot configure device {self.dsuid} after announcement to vdSM. "
+                f"Device structure is immutable once announced per vDC API specification."
+            )
+        
+        from ..components import Output, OutputChannel, BinaryInput, Sensor
 
         logger.info(f"Configuring vdSD {self.dsuid} from config")
 
-        # Configure outputs
-        if "outputs" in config:
-            for output_config in config["outputs"]:
-                output = Output(
-                    vdsd=self,
-                    output_id=output_config.get("outputID", 0),
-                    output_function=output_config.get("outputFunction", "dimmer"),
-                    output_mode=output_config.get("outputMode", "gradual"),
-                    push_changes=output_config.get("pushChanges", True),
-                )
+        # Configure output (singular - per API spec: max ONE output per device)
+        if "output" in config:
+            output_config = config["output"]
+            output = Output(
+                vdsd=self,
+                output_function=output_config.get("outputFunction", "dimmer"),
+                output_mode=output_config.get("outputMode", "gradual"),
+                push_changes=output_config.get("pushChanges", True),
+            )
 
-                # Add channels to output
-                if "channels" in output_config:
-                    for channel_config in output_config["channels"]:
-                        channel = OutputChannel(
-                            vdsd=self,
-                            channel_type=channel_config.get("channelType"),
-                            name=channel_config.get("name", ""),
-                            min_value=channel_config.get("min", 0.0),
-                            max_value=channel_config.get("max", 100.0),
-                            resolution=channel_config.get("resolution", 0.1),
-                            default_value=channel_config.get("default", 0.0),
-                        )
-                        output.add_channel(channel)
+            # Add channels to output
+            if "channels" in output_config:
+                for channel_config in output_config["channels"]:
+                    channel = OutputChannel(
+                        vdsd=self,
+                        channel_type=channel_config.get("channelType"),
+                        name=channel_config.get("name", ""),
+                        min_value=channel_config.get("min", 0.0),
+                        max_value=channel_config.get("max", 100.0),
+                        resolution=channel_config.get("resolution", 0.1),
+                        default_value=channel_config.get("default", 0.0),
+                    )
+                    output.add_channel(channel)
 
-                self.add_output(output)
-                logger.debug(f"Added output {output.output_id} with {len(output.channels)} channels")
+            self._output = output
+            logger.debug(f"Added output with {len(output.channels)} channels")
 
-        # Configure buttons
-        if "buttons" in config:
-            for button_config in config["buttons"]:
-                button = Button(
-                    vdsd=self,
+        # Configure button inputs
+        if "button_inputs" in config:
+            for button_config in config["button_inputs"]:
+                button_input = self.add_button_input(
                     name=button_config.get("name", ""),
-                    button_type=button_config.get("buttonType", "toggle"),
-                    element=button_config.get("element", 0),
+                    button_type=button_config.get("buttonType", 1),
+                    button_id=button_config.get("buttonID"),
+                    button_element_id=button_config.get("buttonElementID", 0),
+                    **button_config.get("settings", {})
                 )
-                self._buttons.append(button)
-                logger.debug(f"Added button: {button.name}")
+                logger.debug(f"Added button input: {button_input.name}")
 
         # Configure binary inputs
         if "binary_inputs" in config:
@@ -516,8 +526,8 @@ class VdSD:
 
         logger.info(
             f"vdSD {self.dsuid} configured: "
-            f"{len(self._outputs)} outputs, "
-            f"{len(self._buttons)} buttons, "
+            f"{1 if self._output else 0} output, "
+            f"{len(self._button_inputs)} buttons, "
             f"{len(self._binary_inputs)} binary inputs, "
             f"{len(self._sensors)} sensors, "
             f"{len(self._scenes)} scenes"
@@ -552,16 +562,20 @@ class VdSD:
             # Apply to another device
             new_device.configure(config)
         """
-        config = {
-            "outputs": [output.to_dict() for output in self._outputs.values()],
-            "buttons": [button.to_dict() for button in self._buttons],
-            "binary_inputs": [binary_input.to_dict() for binary_input in self._binary_inputs],
-            "sensors": [sensor.to_dict() for sensor in self._sensors],
-            "scenes": self._scenes.copy(),
-            "customActions": self.actions.get_custom_actions().get("customActions", []),
-            "states": self.states.get_values().get("deviceStates", []),
-            "deviceProperties": self.device_properties.to_dict().get("deviceProperties", []),
-        }
+        config = {}
+        
+        # Export output (singular) if it exists
+        if self._output:
+            config["output"] = self._output.to_dict()
+        
+        # Export other components
+        config["button_inputs"] = [button_input.to_dict() for button_input in self._button_inputs]
+        config["binary_inputs"] = [binary_input.to_dict() for binary_input in self._binary_inputs]
+        config["sensors"] = [sensor.to_dict() for sensor in self._sensors]
+        config["scenes"] = self._scenes.copy()
+        config["customActions"] = self.actions.get_custom_actions().get("customActions", [])
+        config["states"] = self.states.get_values().get("deviceStates", [])
+        config["deviceProperties"] = self.device_properties.to_dict().get("deviceProperties", [])
 
         return config
 
@@ -647,6 +661,10 @@ class VdSD:
         """
         Add an output channel to this device.
 
+        IMPORTANT: Per vDC API specification, device structure is immutable after
+        announcement to vdSM. This method will raise RuntimeError if called after
+        the device has been announced.
+
         Output channels represent controllable aspects of the device:
         - Brightness (for lights)
         - Hue, Saturation (for color lights)
@@ -695,6 +713,17 @@ class VdSD:
                 resolution=1.0
             )
         """
+        if self._announced:
+            raise RuntimeError(
+                f"Cannot add output channel to device {self.dsuid} after announcement to vdSM. "
+                f"Per vDC API specification, device structure is immutable once announced.\n"
+                f"To modify device capabilities:\n"
+                f"  1. Send vanish notification: await vdc.vanish_device('{self.dsuid}')\n"
+                f"  2. Delete device: vdc.delete_vdsd('{self.dsuid}')\n"
+                f"  3. Create new device with desired configuration\n"
+                f"  4. New device will be announced automatically"
+            )
+        
         from ..components.output_channel import OutputChannel
 
         # Create the output channel
@@ -708,93 +737,324 @@ class VdSD:
             **properties,
         )
 
-        # Ensure we have an output container (outputID 0 by default)
-        output_id = properties.get("output_id", 0)
-        if output_id not in self._outputs:
+        # Create single output if it doesn't exist yet
+        # (Per API: max ONE output per device)
+        if self._output is None:
             from ..components.output import Output
 
-            self._outputs[output_id] = Output(
+            self._output = Output(
                 vdsd=self,
-                output_id=output_id,
                 output_function=properties.get("output_function", "dimmer"),
                 output_mode=properties.get("output_mode", "gradual"),
             )
 
-        # Add channel to output
-        self._outputs[output_id].add_channel(channel)
+        # Add channel to THE output (singular)
+        self._output.add_channel(channel)
 
         logger.info(f"Added output channel type {channel_type} to vdSD {self.dsuid}")
 
         return channel
 
-    def add_button(
+    def add_button_input(
         self,
         name: str,
-        button_type: int,
-        on_press: Optional[Callable] = None,
-        on_release: Optional[Callable] = None,
-        **properties,
-    ) -> "Button":
+        button_type: int = 0,
+        button_id: Optional[int] = None,
+        button_element_id: int = 0,
+        **properties
+    ) -> "ButtonInput":
         """
-        Add a button input to this device.
-
-        Buttons generate events when pressed/released. Common uses:
-        - Wall switches
-        - Remote control buttons
-        - Touch sensors
-        - Gesture inputs
-
-        Button types:
-        - 0: Single press (on press)
-        - 1: Double press
-        - 2: Long press
-        - 3: Release
-
+        Add an API-compliant button input to this device.
+        
+        ButtonInput accepts clickType values directly, as specified in vDC API
+        section 4.2. This is the RECOMMENDED approach for new implementations.
+        
+        Unlike the legacy Button class (which calculates clickType from timing),
+        ButtonInput receives clickType as an integer input from hardware or
+        external logic. This matches the vDC API specification.
+        
+        **IMPORTANT**: This method cannot be called after the device has been
+        announced to vdSM. Device structure is immutable after announcement.
+        
         Args:
-            name: Button name (e.g., "Toggle Button", "Brightness Up")
-            button_type: Type of button interaction
-            on_press: Callback when button is pressed
-            on_release: Callback when button is released
-            **properties: Additional button properties
-
+            name: Human-readable button name (e.g., "Light Switch")
+            button_type: Physical button type per API
+                0 - undefined
+                1 - single pushbutton
+                2 - 2-way pushbutton
+                3 - 4-way navigation button
+                4 - 4-way navigation with center button
+                5 - 8-way navigation with center button
+                6 - on-off switch
+            button_id: Physical button ID (optional, for multi-function buttons)
+            button_element_id: Element of multi-contact button
+                0 - center
+                1 - down
+                2 - up
+                3 - left
+                4 - right
+                5 - upper left
+                6 - lower left
+                7 - upper right
+                8 - lower right
+            **properties: Additional settings (group, function, mode, channel, etc.)
+        
         Returns:
-            Button instance
-
+            ButtonInput instance
+        
+        Raises:
+            RuntimeError: If device has already been announced to vdSM
+        
         Example:
-            # Simple toggle button
-            toggle = device.add_button(
-                name="Power Toggle",
-                button_type=0,
-                on_press=lambda: device.toggle_output()
+            # Simple button (hardware provides clickType directly)
+            button = device.add_button_input(
+                name="Power Button",
+                button_type=1  # Single pushbutton
             )
-
-            # Brightness control buttons
-            device.add_button(
-                name="Brightness Up",
-                button_type=2,  # Long press
-                on_press=lambda: device.increase_brightness()
+            
+            # Hardware reports click events
+            button.set_click_type(0)  # tip_1x (single tap)
+            button.set_click_type(1)  # tip_2x (double tap)
+            button.set_click_type(4)  # hold_start (long press)
+            
+            # Multi-element navigation button (up element)
+            nav_up = device.add_button_input(
+                name="Navigation Up",
+                button_type=4,  # 4-way with center
+                button_id=0,
+                button_element_id=2,  # Up
+                group=1,
+                function=0
             )
+            
+            # With state machine for timing-based detection
+            from pyvdcapi.components.button_state_machine import DSButtonStateMachine
+            
+            button = device.add_button_input(name="Dimmer", button_type=1)
+            sm = DSButtonStateMachine(button, enable_hold_repeat=True)
+            
+            # Hardware calls state machine
+            gpio.on_press(sm.on_press)
+            gpio.on_release(sm.on_release)
         """
-        from ..components.button import Button
+        if self._announced:
+            raise RuntimeError(
+                f"Cannot add button input to device {self.dsuid} after announcement to vdSM. "
+                f"Device structure is immutable once announced per vDC API specification."
+            )
+        
+        from ..components.button_input import ButtonInput
 
-        # Auto-assign button ID based on existing buttons
-        button_id = properties.get("button_id", len(self._buttons))
+        # Auto-assign button ID based on existing button inputs
+        if button_id is None:
+            button_id = properties.get("button_id", len(self._button_inputs))
 
-        # Create the button
-        button = Button(vdsd=self, name=name, button_type=button_type, button_id=button_id)
+        # Create the button input
+        button_input = ButtonInput(
+            vdsd=self,
+            name=name,
+            button_type=button_type,
+            button_id=button_id,
+            button_element_id=button_element_id,
+            **properties
+        )
 
-        # Register callbacks if provided
-        if on_press:
-            button.on_press(on_press)
-        if on_release:
-            button.on_release(on_release)
+        # Add to device collection
+        self._button_inputs.append(button_input)
 
-        # Add to device's button list
-        self._buttons.append(button)
+        logger.info(
+            f"Added button input '{name}' (id={button_id}, type={button_type}, "
+            f"element={button_element_id}) to vdSD {self.dsuid}"
+        )
 
-        logger.info(f"Added button '{name}' (id={button_id}, type={button_type}) " f"to vdSD {self.dsuid}")
+        return button_input
 
-        return button
+    def push_button_state(self, button_id: int, click_type: int) -> None:
+        """
+        Push button state change notification to vdSM.
+        
+        This method is called by ButtonInput.set_click_type() to notify vdSM
+        of button events. It sends a property push notification via the
+        protocol.
+        
+        Args:
+            button_id: Button identifier
+            click_type: Button click type (0-14, 255)
+        
+        Note:
+            This method will be enhanced to actually send protocol messages
+            once the push notification infrastructure is in place.
+        """
+        logger.debug(
+            f"Button {button_id} state push: clickType={click_type} "
+            f"(device {self.dsuid})"
+        )
+        
+        # TODO: Implement actual protocol message sending
+        # This should create and send a vdc_SendPushNotification message
+        # with the button state change.
+        #
+        # For now, just log the event. The actual implementation will
+        # integrate with the VdcHost message sending infrastructure.
+        pass
+
+    def push_binary_input_state(self, input_id: int, state: bool) -> None:
+        """
+        Push binary input state change notification to vdSM.
+        
+        This method is called by BinaryInput.set_state() when the input state
+        changes (e.g., motion detected, door opened). It sends a property push
+        notification via the protocol.
+        
+        Pattern: Device → DSS (Pattern A)
+        The device detects a state change and immediately notifies vdSM.
+        
+        Args:
+            input_id: Binary input identifier (0..N-1)
+            state: New state (True=active, False=inactive)
+        
+        Example:
+            # Motion sensor detects movement
+            binary_input.set_state(True)  # Triggers this push notification
+        """
+        logger.debug(
+            f"Binary input {input_id} state push: state={state} "
+            f"(device {self.dsuid})"
+        )
+        
+        # Create push notification with binary input state
+        # Per API section 4.3.3, push includes value and age
+        properties = {
+            "binaryInputs": {
+                str(input_id): {
+                    "state": {
+                        "value": state,
+                        "age": 0.0  # Age is 0 at moment of change
+                    }
+                }
+            }
+        }
+        
+        # Send push notification asynchronously
+        import asyncio
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self._send_push_notification(properties))
+            else:
+                loop.run_until_complete(self._send_push_notification(properties))
+        except RuntimeError:
+            # No event loop, can't send notification
+            logger.warning("No event loop available for binary input push notification")
+
+    def push_sensor_value(self, sensor_id: int, value: float) -> None:
+        """
+        Push sensor value change notification to vdSM.
+        
+        This method is called by Sensor.update_value() when a significant sensor
+        value change is detected (exceeding hysteresis threshold). It sends a
+        property push notification via the protocol.
+        
+        Pattern: Device → DSS (Pattern A)
+        The device measures a sensor value change and notifies vdSM.
+        
+        Note:
+            Per vDC API convention, sensors are typically polled by vdSM rather
+            than pushing every change. Push notifications are sent only for
+            significant changes (beyond hysteresis) to reduce network traffic.
+        
+        Args:
+            sensor_id: Sensor identifier (0..N-1)
+            value: New sensor value
+        
+        Example:
+            # Temperature sensor detects 2°C change (exceeds hysteresis)
+            sensor.update_value(22.5)  # Triggers this push notification
+        """
+        logger.debug(
+            f"Sensor {sensor_id} value push: value={value} "
+            f"(device {self.dsuid})"
+        )
+        
+        # Create push notification with sensor value
+        # Per API section 4.4.3, push includes value and age
+        properties = {
+            "sensors": {
+                str(sensor_id): {
+                    "value": value,
+                    "age": 0.0  # Age is 0 at moment of change
+                }
+            }
+        }
+        
+        # Send push notification asynchronously
+        import asyncio
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self._send_push_notification(properties))
+            else:
+                loop.run_until_complete(self._send_push_notification(properties))
+        except RuntimeError:
+            # No event loop, can't send notification
+            logger.warning("No event loop available for sensor push notification")
+
+    def push_output_channel_value(self, channel_index: int, value: float) -> None:
+        """
+        Push output channel value change notification to vdSM.
+        
+        This method is called by OutputChannel.update_value() when the hardware
+        changes an output value independently (not in response to DSS command).
+        
+        Pattern: Device → DSS (Pattern C - Bidirectional, Device→DSS direction)
+        
+        CRITICAL DISTINCTION:
+        - OutputChannel.set_value() - DSS → Device: Does NOT call this (no echo back)
+        - OutputChannel.update_value() - Device → DSS: DOES call this (notify DSS)
+        
+        This bidirectional pattern is unique to output channels:
+        - DSS can set values via set_value() → hardware callback → no push
+        - Hardware can change values → update_value() → push to DSS
+        
+        Args:
+            channel_index: Output channel index (brightness=0, hue=1, saturation=2, etc.)
+            value: New channel value
+        
+        Example:
+            # User manually adjusts dimmer on wall switch
+            # Hardware detects change and updates local state
+            channel.update_value(75.0)  # Triggers this push to inform DSS
+        """
+        logger.debug(
+            f"Output channel {channel_index} value push: value={value} "
+            f"(device {self.dsuid})"
+        )
+        
+        # Create push notification with output channel value
+        # Per API section 4.9.2, push includes value and age
+        properties = {
+            "outputChannels": {
+                str(channel_index): {
+                    "value": value,
+                    "age": 0.0  # Age is 0 at moment of change
+                }
+            }
+        }
+        
+        # Send push notification asynchronously
+        import asyncio
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self._send_push_notification(properties))
+            else:
+                loop.run_until_complete(self._send_push_notification(properties))
+        except RuntimeError:
+            # No event loop, can't send notification
+            logger.warning("No event loop available for output channel push notification")
 
     def add_sensor(
         self,
@@ -836,6 +1096,12 @@ class VdSD:
             # Update sensor value from hardware
             temp_sensor.update_value(22.5)  # Room temperature
         """
+        if self._announced:
+            raise RuntimeError(
+                f"Cannot add sensor to device {self.dsuid} after announcement to vdSM. "
+                f"Device structure is immutable once announced per vDC API specification."
+            )
+        
         from ..components.sensor import Sensor
 
         # Auto-assign sensor ID based on existing sensors
@@ -870,6 +1136,7 @@ class VdSD:
         channel_values: Dict[int, float],
         effect: int = DSSceneEffect.SMOOTH,
         dont_care: bool = False,
+        ignore_local_priority: bool = False,
         **properties,
     ) -> None:
         """
@@ -880,12 +1147,14 @@ class VdSD:
         - Values for each output channel
         - Transition effect (how to reach values)
         - Don't care flag (whether device participates)
+        - Ignore local priority flag (whether scene bypasses priority lock)
 
         Args:
             scene_number: Scene number (0-127, see DSScene enum)
             channel_values: Dict mapping channel type to target value
             effect: Transition effect (DSSceneEffect enum)
             dont_care: If True, device ignores this scene
+            ignore_local_priority: If True, scene can bypass localPriority lock
             **properties: Additional scene properties
 
         Example:
@@ -918,7 +1187,13 @@ class VdSD:
                 effect=DSSceneEffect.SMOOTH
             )
         """
-        scene_config = {"channels": channel_values, "effect": effect, "dontCare": dont_care, **properties}
+        scene_config = {
+            "channels": channel_values,
+            "effect": effect,
+            "dontCare": dont_care,
+            "ignoreLocalPriority": ignore_local_priority,
+            **properties
+        }
 
         self._scenes[scene_number] = scene_config
 
@@ -959,13 +1234,13 @@ class VdSD:
         # Add vdSD-specific properties
         props.update(self._vdsd_props.to_dict())
 
-        # Add output information (outputs contain channels)
-        if self._outputs:
-            props["outputs"] = [output.to_dict() for output in self._outputs.values()]
+        # Add output information (output can have multiple channels)
+        if self._output:
+            props["output"] = self._output.to_dict()
 
         # Add input information
         inputs = []
-        inputs.extend([btn.to_dict() for btn in self._buttons])
+        # All button inputs are now API-compliant ButtonInput instances
         inputs.extend([bi.to_dict() for bi in self._binary_inputs])
         inputs.extend([sensor.to_dict() for sensor in self._sensors])
         if inputs:
@@ -1075,55 +1350,65 @@ class VdSD:
 
         return message
 
+    def mark_announced(self) -> None:
+        """
+        Mark this device as announced to vdSM.
+        
+        After announcement, device structure becomes immutable per vDC API spec.
+        Features (outputs, buttons, sensors) cannot be added after announcement.
+        
+        To modify device capabilities after announcement:
+        1. Send vanish notification: vdc.vanish_device(dsuid)
+        2. Delete device: vdc.delete_vdsd(dsuid)
+        3. Create new device with desired configuration
+        4. New device will be announced on next vdSM connection
+        """
+        self._announced = True
+        logger.info(f"Device {self.dsuid} marked as announced - structure now immutable")
+
     def _save_config(self) -> None:
         """Save device configuration to persistence."""
         config = {**self._common_props.to_dict(), **self._vdsd_props.to_dict(), "vdc_dSUID": self.vdc.dsuid}
 
-        # Add outputs configuration
-        if self._outputs:
-            config["outputs"] = [output.to_dict() for output in self._outputs.values()]
+        # Add output configuration
+        if self._output:
+            config["output"] = self._output.to_dict()
 
         self._persistence.set_vdsd(self.dsuid, config)
 
-    def _apply_output_changes(self, outputs_data: List[Dict[str, Any]]) -> None:
+    def _apply_output_changes(self, output_data: Dict[str, Any]) -> None:
         """
         Apply output value changes from vdSM.
 
-        This is called when vdSM sends property changes for outputs.
+        This is called when vdSM sends property changes for the output.
         Values are applied to the Output/OutputChannel objects and
         hardware callbacks are triggered.
 
         Args:
-            outputs_data: List of output property dictionaries from vdSM
+            output_data: Output property dictionary from vdSM
         """
-        for output_data in outputs_data:
-            output_id = output_data.get("outputID")
-            if output_id is None:
-                continue
+        if not self._output:
+            logger.warning(f"vdSD {self.dsuid} has no output")
+            return
 
-            output = self._outputs.get(output_id)
-            if not output:
-                logger.warning(f"vdSD {self.dsuid} has no output {output_id}")
-                continue
+        # Update output configuration
+        self._output.from_dict(output_data)
 
-            # Update output configuration
-            output.from_dict(output_data)
+        # Apply channel value changes
+        if "channels" in output_data:
+            channels = output_data["channels"]
+            # If channels is a mapping from channelType->data
+            if isinstance(channels, dict):
+                items = channels.items()
+            else:
+                # List of channel entries
+                # Convert to (channelTypeStr, channel_data) pairs
+                def _iter_list(lst):
+                    for ch in lst:
+                        key = ch.get("channelType") or ch.get("channelType", None)
+                        yield (str(int(key)) if key is not None else None, ch)
 
-            # Apply channel value changes
-            if "channels" in output_data:
-                channels = output_data["channels"]
-                # If channels is a mapping from channelType->data
-                if isinstance(channels, dict):
-                    items = channels.items()
-                else:
-                    # List of channel entries
-                    # Convert to (channelTypeStr, channel_data) pairs
-                    def _iter_list(lst):
-                        for ch in lst:
-                            key = ch.get("channelType") or ch.get("channelType", None)
-                            yield (str(int(key)) if key is not None else None, ch)
-
-                    items = _iter_list(channels)
+                items = _iter_list(channels)
 
                 for channel_type_str, channel_data in items:
                     try:
@@ -1132,11 +1417,11 @@ class VdSD:
                         channel_type = DSChannelType(int(channel_type_str))
                         if "value" in channel_data:
                             # Apply the value change (triggers hardware callback)
-                            output.set_channel_value(
+                            self._output.set_channel_value(
                                 channel_type, channel_data["value"], transition_time=channel_data.get("transitionTime")
                             )
                             logger.info(
-                                f"vdSD {self.dsuid}: Set output {output_id} "
+                                f"vdSD {self.dsuid}: Set output "
                                 f"channel {channel_type} to {channel_data['value']}"
                             )
                     except (ValueError, KeyError) as e:
@@ -1148,7 +1433,16 @@ class VdSD:
         self._persistence.update_vdsd_property(self.dsuid, "scenes", self._scenes)
 
     def _initialize_common_states(self) -> None:
-        """Initialize common device states."""
+        """
+        Initialize common device states required by vDC API specification.
+
+        Adds three standard states to all devices:
+        1. operational: Device operational status (off, initializing, running, error, shutdown)
+        2. reachable: Network connectivity status (unreachable, reachable)
+        3. service: Service mode indicator (normal, service)
+
+        Initial values: operational=running, reachable=reachable, service=normal
+        """
         # Operational state
         self.states.add_state_description(
             name="operational",
@@ -1172,7 +1466,15 @@ class VdSD:
         self.states.set_state("service", "normal")
 
     def _initialize_common_actions(self) -> None:
-        """Initialize common device actions."""
+        """
+        Initialize common device actions required by vDC API specification.
+
+        Adds standard action:
+        - identify: Make device identifiable by blinking LED or audible signal
+          Parameter: duration (1.0-60.0 seconds, default 3.0s)
+
+        This action allows users to physically locate devices during setup.
+        """
         from ..components.actions import ActionParameter
 
         # Identify action (make device identifiable)
@@ -1255,6 +1557,19 @@ class VdSD:
         """
         logger.info(f"Call scene {scene} on device {self.dsuid} (force={force}, mode={mode})")
 
+        # Check local priority enforcement
+        if self._local_priority_scene is not None and not force:
+            scene_config_check = self._scenes.get(scene, {})
+            ignore_priority = scene_config_check.get("ignoreLocalPriority", False)
+            
+            if not ignore_priority and scene != self._local_priority_scene:
+                logger.info(
+                    f"Scene {scene} blocked by local priority "
+                    f"(active priority: {self._local_priority_scene}). "
+                    f"Use force=True to override."
+                )
+                return
+
         # Get scene configuration
         scene_config = self._scenes.get(scene, {})
 
@@ -1265,29 +1580,27 @@ class VdSD:
         # Save current state to undo stack (before applying scene)
         self._save_undo_state()
 
-        # Get output containers
-        for output_id, output in self._outputs.items():
-            # Extract scene values for this output
-            scene_values = scene_config.get("outputs", {}).get(output_id, {})
+        # Get scene values for the output
+        if self._output:
+            scene_output = scene_config.get("output", {})
+            scene_values = scene_output.get("channels", {})
 
-            if not scene_values:
-                continue
+            if scene_values:
+                # Get effect for transition
+                effect = scene_config.get("effect", DSSceneEffect.SMOOTH)
 
-            # Get effect for transition
-            effect = scene_config.get("effect", DSSceneEffect.SMOOTH)
-
-            # Apply scene values to output
-            if mode == "min":
-                # Only apply if scene values are higher
-                output.apply_scene_values(scene_values, effect=effect, mode="min")
-            else:
-                # Normal: apply unconditionally
-                output.apply_scene_values(scene_values, effect=effect)
+                # Apply scene values to output
+                if mode == "min":
+                    # Only apply if scene values are higher
+                    self._output.apply_scene_values(scene_values, effect=effect, mode="min")
+                else:
+                    # Normal: apply unconditionally
+                    self._output.apply_scene_values(scene_values, effect=effect)
 
         # Notify vdSM of changes (if outputs changed)
         await self._send_push_notification()
 
-    async def save_scene(self, scene: int) -> None:
+    async def save_scene(self, scene: int, ignore_local_priority: bool = False) -> None:
         """
         Save current output values to a scene number.
 
@@ -1296,11 +1609,13 @@ class VdSD:
 
         Args:
             scene: Scene number to save to (0-127)
+            ignore_local_priority: If True, scene can bypass localPriority lock
 
         Scene Storage:
             - Scene configurations stored in YAML persistence
             - Includes all output channel values
             - Optionally includes effect settings
+            - ignoreLocalPriority flag for priority bypass
 
         Example:
             # Set brightness to 75%
@@ -1308,6 +1623,9 @@ class VdSD:
 
             # Save current state as scene 17 ("Preset 1")
             await device.save_scene(17)
+            
+            # Save scene that can bypass local priority
+            await device.save_scene(5, ignore_local_priority=True)
 
             # Later, recall this exact state
             await device.call_scene(17)
@@ -1315,17 +1633,22 @@ class VdSD:
         logger.info(f"Save scene {scene} on device {self.dsuid}")
 
         # Capture current output values
-        scene_config = {"outputs": {}}
+        scene_config = {"ignoreLocalPriority": ignore_local_priority}
 
-        for output_id, output in self._outputs.items():
+        if self._output:
             # Get all channel values
-            channel_values = output.get_all_channel_values()
+            channel_values = self._output.get_all_channel_values()
 
             if channel_values:
-                scene_config["outputs"][output_id] = {"channels": channel_values}
+                scene_config["output"] = {"channels": channel_values}
 
         # Store in scenes dictionary
         self._scenes[scene] = scene_config
+
+        logger.info(
+            f"Saved scene {scene} on device {self.dsuid} "
+            f"(ignoreLocalPriority={ignore_local_priority})"
+        )
 
         # Persist to YAML
         self._save_scenes()
@@ -1368,11 +1691,9 @@ class VdSD:
         previous_state = self._undo_stack.pop()
 
         # Restore output values
-        for output_id, channel_values in previous_state.items():
-            output = self._outputs.get(output_id)
-            if output:
-                for channel_type, value in channel_values.items():
-                    output.set_channel_value(channel_type, value, apply_now=True)
+        if self._output and previous_state:
+            for channel_type, value in previous_state.items():
+                self._output.set_channel_value(channel_type, value, apply_now=True)
 
         # Notify vdSM
         await self._send_push_notification()
@@ -1387,14 +1708,15 @@ class VdSD:
             self._undo_stack = []
 
         # Capture current state
-        current_state = {}
-        for output_id, output in self._outputs.items():
-            current_state[output_id] = output.get_all_channel_values()
+        current_state = None
+        if self._output:
+            current_state = self._output.get_all_channel_values()
 
         # Add to stack (limit depth to 5)
-        self._undo_stack.append(current_state)
-        if len(self._undo_stack) > 5:
-            self._undo_stack.pop(0)
+        if current_state:
+            self._undo_stack.append(current_state)
+            if len(self._undo_stack) > 5:
+                self._undo_stack.pop(0)
 
     async def identify(self, duration: float = 3.0) -> None:
         """
@@ -1445,57 +1767,95 @@ class VdSD:
 
     def set_local_priority(self, scene: Optional[int] = None) -> None:
         """
-        Set local priority for device/scene.
+        Set local priority scene lock.
+        
+        When a local priority scene is set, only that scene (or scenes with
+        ignoreLocalPriority=True) can be called. Other scene calls are blocked
+        unless force=True is used.
+        
+        This is a dS 1.0 compatibility feature for local device control priority.
+        
+        Args:
+            scene: Scene number to lock (0-127), or None to clear priority
+            
+        Example:
+            # Lock to scene 10 (local control)
+            device.set_local_priority(10)
+            
+            await device.call_scene(5)  # Blocked (not priority scene)
+            await device.call_scene(10)  # Allowed (matches priority)
+            await device.call_scene(5, force=True)  # Allowed (force override)
+            
+            # Clear priority
+            device.set_local_priority(None)
+            await device.call_scene(5)  # Now allowed
+        """
+        self._local_priority_scene = scene
+        
+        if scene is not None:
+            logger.info(f"Local priority set to scene {scene} on device {self.dsuid}")
+        else:
+            logger.info(f"Local priority cleared on device {self.dsuid}")
+        
+        # Persist priority settings
+        if self._persistence:
+            self._persistence.update_vdsd_property(self.dsuid, "local_priority_scene", scene)
 
-        Local priority determines which device takes precedence when
-        multiple devices control the same resource.
+    def get_control_value(self, control_name: str) -> Optional[float]:
+        """
+        Get a control value (device-side read-only access).
+
+        This is the RECOMMENDED way for device hardware to read control values
+        that were set by DSS. Control values are write-only from DSS perspective
+        (acc="w"), but read-only from device perspective.
 
         Args:
-            scene: Scene number to prioritize (None = global priority)
+            control_name: Name of control (e.g., "heatingLevel")
 
-        Priority Levels:
-            - Local priority overrides group scenes
-            - Used in multi-device zones
-            - Allows individual device control
+        Returns:
+            Current value or None if not set
 
         Example:
-            # Give device priority for scene 5
-            device.set_local_priority(scene=5)
+            # Device reads heatingLevel to control radiator
+            heating = device.get_control_value("heatingLevel")
+            if heating is not None:
+                adjust_radiator_valve(heating)
         """
-        logger.info(f"Set local priority on device {self.dsuid} for scene {scene}")
-
-        # Store priority setting
-        if not hasattr(self, "_local_priorities"):
-            self._local_priorities = {}
-
-        if scene is not None:
-            self._local_priorities[scene] = True
-        else:
-            # Global priority
-            self._local_priorities["*"] = True
-
-        # Persist priority settings
-        self._persistence.update_vdsd_property(self.dsuid, "local_priorities", self._local_priorities)
+        cv = self.controlValues.get(control_name)
+        return cv.value if cv else None
 
     def set_control_value(self, control_name: str, value: float) -> None:
         """
-        Set a control value (distinct from output channels).
+        Set a control value (INTERNAL - called by vDC host when DSS sends update).
 
-        Control values represent actuator positions, valve states, etc.
-        They are different from output channels (brightness, color).
+        ⚠️  WARNING: This method should ONLY be called by the vDC host when processing
+        SetControlValue notifications from DSS. Device code should NOT call this method
+        directly - devices should only READ control values via get_control_value() or
+        controlValues.get().
+
+        Control values are:
+        - Write-only from DSS perspective (DSS writes, never reads)
+        - Read-only from device perspective (device reads, should not write)
+
+        This ensures proper data flow: DSS → vDC → Device Hardware
 
         Args:
-            control_name: Name of control (e.g., "valve_position")
-            value: Control value (0-100 typically)
+            control_name: Name of control (e.g., "heatingLevel")
+            value: Control value (-100 to +100 for heatingLevel)
 
-        Use Cases:
-            - Heating: Valve position (0-100%)
-            - Blinds: Slat angle (-90 to +90 degrees)
-            - HVAC: Fan speed, damper position
+        Proper Usage:
+            # ❌ INCORRECT (device arbitrarily writing):
+            # device.set_control_value("heatingLevel", 50.0)
 
-        Example:
-            # Set heating valve to 75%
-            device.set_control_value("valve_position", 75.0)
+            # ✅ CORRECT (device reading):
+            # heating = device.get_control_value("heatingLevel")
+
+        Internal Flow:
+            1. DSS sends SetControlValue notification
+            2. VdcHost routes to this method
+            3. Control value updated and persisted
+            4. Hardware callback triggered
+            5. Push notification sent to vdSM
         """
         logger.info(f"Set control '{control_name}' to {value} on device {self.dsuid}")
 
@@ -1550,7 +1910,7 @@ class VdSD:
             if host:
                 await host.send_push_notification(self.dsuid, properties)
 
-    def _on_output_change(self, output_id: int, channel_type: DSChannelType, value: float) -> None:
+    def _on_output_change(self, channel_type: DSChannelType, value: float) -> None:
         """
         Callback when output channel value changes.
 
@@ -1558,14 +1918,13 @@ class VdSD:
         This sends a push notification to vdSM.
 
         Args:
-            output_id: Output that changed
             channel_type: Channel that changed
             value: New value
         """
-        logger.debug(f"Output {output_id} channel {channel_type} changed to {value}")
+        logger.debug(f"Output channel {channel_type} changed to {value}")
 
         # Create push notification with channel values
-        properties = {"outputs": {output_id: {"channels": {str(channel_type.value): {"value": value}}}}}
+        properties = {"output": {"channels": {str(channel_type.value): {"value": value}}}}
 
         # Send push notification asynchronously
         import asyncio

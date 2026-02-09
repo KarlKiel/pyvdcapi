@@ -193,6 +193,16 @@ class BinaryInput:
         else:
             self.input_id = input_id
 
+        # Description properties (API section 4.3.1)
+        self.ds_index = self.input_id  # Device input index (0..N-1)
+        self.input_usage = 0  # 0=undefined, 1=room, 2=outdoors, 3=user
+        self.sensor_function = 0  # Sensor function enum (default undefined)
+
+        # Settings properties (API section 4.3.2) - configurable from DSS
+        self.group = 0  # dS group number (0=undefined)
+        # Note: sensor_function is r/w in settings but also r in description
+        # The description shows hardwired function, settings allows override
+
         # State tracking
         self._state = initial_state
         self._last_change_time = time.time()
@@ -249,11 +259,12 @@ class BinaryInput:
         # Trigger callbacks
         self._change_observable.notify(self.input_id, effective_state)
 
-        # TODO: Send binary input state change notification to vdSM
-        # self.vdsd.send_binary_input_notification(
-        #     self.input_id,
-        #     effective_state
-        # )
+        # Send binary input state change notification to vdSM
+        # Pattern A: Device → DSS (push notification on state change)
+        self.vdsd.push_binary_input_state(
+            self.input_id,
+            effective_state
+        )
 
     def get_state(self) -> bool:
         """
@@ -266,14 +277,15 @@ class BinaryInput:
 
     def get_age(self) -> float:
         """
-        Get age of current state in milliseconds.
+        Get age of current state in seconds.
 
         Indicates how long the input has been in current state.
+        Per vDC API spec section 4.3.3, age is returned in seconds.
 
         Returns:
-            Milliseconds since last state change
+            Seconds since last state change
         """
-        return (time.time() - self._last_change_time) * 1000.0
+        return time.time() - self._last_change_time
 
     def on_change(self, callback: Callable[[int, bool], None]) -> None:
         """
@@ -323,32 +335,64 @@ class BinaryInput:
         Convert binary input to dictionary for property tree.
 
         Returns:
-            Dictionary representation of binary input
+            Dictionary representation of binary input per API section 4.3
         """
         return {
-            # Description / config
+            # Description properties (section 4.3.1) - read-only, invariable
             "name": self.name,
+            "dsIndex": self.ds_index,
+            "inputType": self.input_type,
+            "inputUsage": self.input_usage,
+            "sensorFunction": self.sensor_function,
+            # Legacy compatibility
             "inputID": self.input_id,
-            "inputType": "binary",
             "sensorType": self.input_type,
-            "invert": self.invert,
-            # State
+            # Settings (section 4.3.2) - configurable
+            "settings": {
+                "group": self.group,
+                "sensorFunction": self.sensor_function,  # Also r/w in settings
+                "invert": self.invert,
+            },
+            # State (section 4.3.3) - dynamic
             "state": {"value": self._state, "age": self.get_age()},
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
         """
         Update binary input configuration from dictionary.
+        
+        Handles settings updates from DSS (API section 4.3.2).
 
         Args:
             data: Dictionary with input properties
         """
+        # Description properties (mostly read-only)
         if "name" in data:
             self.name = data["name"]
-        # Accept settings nested under 'settings' or top-level keys
-        settings = data.get("settings") or data
+            
+        # Settings properties (section 4.3.2) - DSS → Device (Pattern B)
+        # Accept settings nested or top-level
+        settings = data.get("settings", data)
+        
+        if "group" in settings:
+            old_group = self.group
+            self.group = settings["group"]
+            logger.info(
+                f"BinaryInput {self.input_id} group changed: {old_group} → {self.group}"
+            )
+        
+        if "sensorFunction" in settings:
+            old_function = self.sensor_function
+            self.sensor_function = settings["sensorFunction"]
+            logger.info(
+                f"BinaryInput {self.input_id} sensorFunction changed: "
+                f"{old_function} → {self.sensor_function}"
+            )
+        
         if "invert" in settings:
             self.invert = settings["invert"]
+            
+        # Legacy support
         if "sensorType" in settings:
             self.input_type = settings["sensorType"]
         if "inputType" in settings:
