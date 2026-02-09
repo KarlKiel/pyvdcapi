@@ -2,6 +2,11 @@
 
 The pyvdcapi library supports automatic service discovery using mDNS/DNS-SD (also known as Avahi or Bonjour). This allows vdSMs to automatically find and connect to vDC hosts on the local network without manual configuration.
 
+**Related Documentation:**
+- [README.md](README.md) - Complete feature overview
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
+- [TESTING.md](TESTING.md) - Test examples
+
 ## Overview
 
 When service announcement is enabled, the vDC host broadcasts its presence on the local network using the mDNS protocol. vdSMs can then discover the host automatically without needing to know its IP address or hostname.

@@ -4,6 +4,12 @@
 
 This document outlines the complete architecture for the Python vDC API implementation. The system enables creating vDC hosts that manage virtual devices (vdSDs) through virtual device connectors (vDCs), communicating with digitalSTROM vdSM over TCP using protocol buffers.
 
+**Related Documentation:**
+- [README.md](README.md) - Feature overview and quick start
+- [API_REFERENCE.md](API_REFERENCE.md) - Complete API documentation
+- [TESTING.md](TESTING.md) - Test examples and architecture validation
+- [GETTING_STARTED.md](GETTING_STARTED.md) - Setup and learning path
+
 ## 2. System Architecture
 
 ```
@@ -54,9 +60,11 @@ This document outlines the complete architecture for the Python vDC API implemen
 
 ## 3. Component Responsibilities
 
+For detailed API reference, see [API_REFERENCE.md](API_REFERENCE.md) and [TESTING.md](TESTING.md) for test examples.
+
 ### 3.1 VdcHost (Main Container)
 
-**File:** `pyvdcapi/core/vdc_host.py`
+**File:** `pyvdcapi/entities/vdc_host.py`
 
 **Responsibilities:**
 - TCP server management (listen on configured port)

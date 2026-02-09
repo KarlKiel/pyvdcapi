@@ -4,7 +4,12 @@ This directory contains the Python representation of the vDC API protocol buffer
 
 ## Generated Files
 
-- `pyvdcapi/network/genericVDC_pb2.py` - Generated Python code (moved into package)
+- `pyvdcapi/network/genericVDC_pb2.py` - Generated Python code from `proto/genericVDC.proto`
+
+**Location**: The generated file is included in the package and can be imported as:
+```python
+from pyvdcapi.network import genericVDC_pb2
+```
 
 ## How to Use
 

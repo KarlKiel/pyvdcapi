@@ -1,6 +1,11 @@
 # digitalSTROM Constants Reference
 
-This document describes the standard digitalSTROM constants implemented in `pyvdcapi/constants.py`.
+This document describes the standard digitalSTROM constants implemented in `pyvdcapi/core/constants.py`.
+
+**See Also:** 
+- [API_REFERENCE.md](API_REFERENCE.md) - Complete API documentation
+- [README.md](README.md) - Feature overview
+- [TESTING.md](TESTING.md) - Test examples using constants
 
 ## Scene Numbers
 

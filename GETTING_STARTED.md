@@ -9,10 +9,11 @@ This guide will get you up and running as a pyvdcapi developer in 30 minutes.
 ## Quick Links
 
 📖 **Documentation You Need:**
-- [SUMMARY.md](SUMMARY.md) - Start here! Executive overview
+- [README.md](README.md) - Start here! Complete overview
+- [TESTING.md](TESTING.md) - Test suite guide and examples
 - [API_REFERENCE.md](API_REFERENCE.md) - Your coding reference
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design details
-- [ISSUES.md](ISSUES.md) - Known issues and tasks
+- [CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md) - Recent improvements
 
 🔧 **Important Files:**
 - `examples/` - Working code examples (study these!)
