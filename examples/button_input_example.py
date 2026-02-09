@@ -23,7 +23,7 @@ import asyncio
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from pyvdcapi import VdcHost, Vdc, VdSD
-from pyvdcapi.constants import DSDeviceType, DSChannelType
+from pyvdcapi.core.constants import DSDeviceType, DSChannelType
 from pyvdcapi.components import ButtonInput, DSButtonStateMachine
 
 
