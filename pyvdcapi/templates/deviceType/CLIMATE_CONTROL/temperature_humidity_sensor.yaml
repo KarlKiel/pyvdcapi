@@ -1,0 +1,33 @@
+template_metadata:
+  template_name: "temperature_humidity_sensor"
+  description: "Combined temperature and humidity sensor for climate monitoring"
+  created_from_model: "Climate Sensor TH"
+  template_version: "1.0"
+
+device_config:
+  model: "Climate Sensor TH"
+  model_uid: "climate-sensor-th"
+  model_version: "1.0"
+  primary_group: 9  # CLIMATE_CONTROL
+  
+  instance_parameters:
+    name: REQUIRED
+    enumeration: REQUIRED
+  
+  # Sensor configurations
+  sensors:
+    # Temperature sensor
+    - sensor_type: 1  # TEMPERATURE
+      min_value: -20.0
+      max_value: 60.0
+      resolution: 0.1
+      update_interval: 60  # Update every 60 seconds
+      name: "Temperature"
+    
+    # Humidity sensor
+    - sensor_type: 2  # HUMIDITY
+      min_value: 0.0
+      max_value: 100.0
+      resolution: 0.1
+      update_interval: 60
+      name: "Humidity"
