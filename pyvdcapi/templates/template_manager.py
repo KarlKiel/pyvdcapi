@@ -21,7 +21,7 @@ This enables:
 
 import yaml
 import os
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from pathlib import Path
 import logging
 from enum import Enum
@@ -255,6 +255,10 @@ class TemplateManager:
             for sensor in vdsd._sensors:
                 sensor_configs.append(self._extract_sensor_config(sensor))
             config["device_config"]["sensors"] = sensor_configs
+
+        # Add actions if present
+        if hasattr(vdsd, "actions") and vdsd.actions is not None:
+            config["device_config"]["actions"] = vdsd.actions.to_dict()
         
         # Add scenes if saved
         if hasattr(vdsd, '_scenes') and vdsd._scenes:
@@ -317,6 +321,7 @@ class TemplateManager:
         instance_name: str,
         enumeration: int,
         group_override: Optional[int] = None,
+        action_handlers: Optional[Dict[str, Callable]] = None,
         **instance_params,
     ) -> "VdSD":
         """
@@ -329,8 +334,9 @@ class TemplateManager:
             instance_name: Name for the new device instance
             enumeration: Device enumeration number (for dSUID generation)
             group_override: Optional group override (uses template group if not provided)
+            action_handlers: Optional mapping from action name to handler callable
             **instance_params: Additional instance-specific parameters
-                              (e.g., initial_values for output channels)
+                              (e.g., value overrides for output channels)
             
         Returns:
             Configured VdSD instance
@@ -403,6 +409,10 @@ class TemplateManager:
         # Restore scenes if present
         if "scenes" in device_config:
             device._scenes = device_config["scenes"]
+
+        # Restore actions if present
+        if "actions" in device_config:
+            self._apply_actions_config(device, device_config["actions"], action_handlers)
         
         logger.info(
             f"Created device '{instance_name}' from template '{template_name}' "
@@ -410,6 +420,78 @@ class TemplateManager:
         )
         
         return device
+
+    def _build_action_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert action parameter dicts to ActionParameter objects."""
+        from pyvdcapi.components.actions import ActionParameter
+
+        result: Dict[str, Any] = {}
+        for name, cfg in (params or {}).items():
+            result[name] = ActionParameter(
+                param_type=cfg.get("type"),
+                min_value=cfg.get("min"),
+                max_value=cfg.get("max"),
+                resolution=cfg.get("resolution"),
+                siunit=cfg.get("siunit"),
+                options=cfg.get("options"),
+                default=cfg.get("default"),
+            )
+        return result
+
+    def _resolve_action_handler(
+        self,
+        action_name: str,
+        short_name: str,
+        action_handlers: Optional[Dict[str, Callable]],
+    ) -> Optional[Callable]:
+        if not action_handlers:
+            return None
+        return (
+            action_handlers.get(action_name)
+            or action_handlers.get(short_name)
+        )
+
+    def _apply_actions_config(
+        self,
+        device: "VdSD",
+        actions_config: Dict[str, Any],
+        action_handlers: Optional[Dict[str, Callable]] = None,
+    ) -> None:
+        """Apply action templates and custom actions, optionally binding handlers."""
+        descriptions = actions_config.get("deviceActionDescriptions", [])
+        for desc in descriptions:
+            params = self._build_action_params(desc.get("params", {}))
+            device.actions.add_action_template(
+                name=desc.get("name"),
+                params=params,
+                description=desc.get("description", ""),
+            )
+
+        standard_actions = actions_config.get("standardActions", [])
+        for action in standard_actions:
+            action_id = action.get("name")
+            short = action.get("action")
+            params = self._build_action_params(action.get("params", {}))
+            handler = self._resolve_action_handler(action_id, short, action_handlers)
+            device.actions.add_standard_action(
+                name=short,
+                description=action.get("description", ""),
+                params=params,
+                handler=handler,
+            )
+
+        custom_actions = actions_config.get("customActions", [])
+        for action in custom_actions:
+            action_id = action.get("name", "")
+            short = action_id[7:] if action_id.startswith("custom.") else action_id
+            handler = self._resolve_action_handler(action_id, short, action_handlers)
+            device.actions.add_custom_action(
+                name=short,
+                title=action.get("title", ""),
+                action_template=action.get("action", ""),
+                params=action.get("params", {}),
+                handler=handler,
+            )
 
     def _apply_output_config(
         self,

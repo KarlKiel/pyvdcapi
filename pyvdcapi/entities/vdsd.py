@@ -753,6 +753,185 @@ class VdSD:
 
         return channel
 
+    def bind_output_channel(
+        self,
+        channel_type: int,
+        getter: Callable[[], Optional[float]],
+        setter: Optional[Callable[..., Any]] = None,
+        poll_interval: Optional[float] = None,
+        epsilon: float = 0.0,
+    ):
+        """
+        Bind an output channel to a native hardware value (single-step).
+
+        Args:
+            channel_type: DSChannelType enum value
+            getter: Function returning native hardware value
+            setter: Function applying vdSM value to hardware (optional)
+            poll_interval: If set, poll native value every N seconds
+            epsilon: Minimum change required to publish updates
+        """
+        if self._output is None:
+            raise RuntimeError("Device has no output to bind")
+
+        from ..core.constants import DSChannelType
+
+        try:
+            ch_type = DSChannelType(channel_type)
+        except ValueError:
+            ch_type = channel_type
+
+        channel = self._output.get_channel(ch_type)
+        if channel is None:
+            raise RuntimeError(f"Output channel {channel_type} not found")
+
+        return channel.bind_to(
+            getter=getter,
+            setter=setter,
+            poll_interval=poll_interval,
+            epsilon=epsilon,
+        )
+
+    def bind_output_channel_events(
+        self,
+        channel_type: int,
+        register: Callable[[Callable[[float], None]], None],
+    ) -> None:
+        """
+        Bind output channel to native hardware events (Hardware → vdSM).
+        """
+        if self._output is None:
+            raise RuntimeError("Device has no output to bind")
+
+        from ..core.constants import DSChannelType
+
+        try:
+            ch_type = DSChannelType(channel_type)
+        except ValueError:
+            ch_type = channel_type
+
+        channel = self._output.get_channel(ch_type)
+        if channel is None:
+            raise RuntimeError(f"Output channel {channel_type} not found")
+
+        channel.bind_to_events(register)
+
+    def bind_sensor(
+        self,
+        sensor_index: int,
+        getter: Callable[[], Optional[float]],
+        poll_interval: float,
+        epsilon: float = 0.0,
+    ):
+        """
+        Bind a sensor to a native hardware value (Hardware → vdSM).
+
+        Args:
+            sensor_index: Index of sensor in device
+            getter: Function returning native sensor value
+            poll_interval: Poll interval in seconds
+            epsilon: Minimum change required to publish updates
+        """
+        if sensor_index >= len(self._sensors):
+            raise RuntimeError("Sensor index out of range")
+
+        return self._sensors[sensor_index].bind_to(
+            getter=getter,
+            poll_interval=poll_interval,
+            epsilon=epsilon,
+        )
+
+    def bind_sensor_events(
+        self,
+        sensor_index: int,
+        register: Callable[[Callable[[float], None]], None],
+    ) -> None:
+        """
+        Bind sensor to native hardware events (Hardware → vdSM).
+        """
+        if sensor_index >= len(self._sensors):
+            raise RuntimeError("Sensor index out of range")
+
+        self._sensors[sensor_index].bind_to_events(register)
+
+    def bind_binary_input(
+        self,
+        input_index: int,
+        getter: Callable[[], Optional[bool]],
+        poll_interval: float,
+    ):
+        """
+        Bind a binary input to a native hardware state (Hardware → vdSM).
+
+        Args:
+            input_index: Index of binary input in device
+            getter: Function returning native state
+            poll_interval: Poll interval in seconds
+        """
+        if input_index >= len(self._binary_inputs):
+            raise RuntimeError("Binary input index out of range")
+
+        return self._binary_inputs[input_index].bind_to(
+            getter=getter,
+            poll_interval=poll_interval,
+        )
+
+    def bind_binary_input_events(
+        self,
+        input_index: int,
+        register: Callable[[Callable[[bool], None]], None],
+    ) -> None:
+        """
+        Bind binary input to native hardware events (Hardware → vdSM).
+        """
+        if input_index >= len(self._binary_inputs):
+            raise RuntimeError("Binary input index out of range")
+
+        self._binary_inputs[input_index].bind_to_events(register)
+
+    def bind_button_input(
+        self,
+        button_index: int,
+        event_getter: Callable[[], Optional[Any]],
+        poll_interval: float = 0.1,
+    ):
+        """
+        Bind a button input to native hardware events (Hardware → vdSM).
+
+        Args:
+            button_index: Index of button input in device
+            event_getter: Function returning the next button event
+            poll_interval: Poll interval in seconds
+        """
+        if button_index >= len(self._button_inputs):
+            raise RuntimeError("Button input index out of range")
+
+        return self._button_inputs[button_index].bind_to(
+            event_getter=event_getter,
+            poll_interval=poll_interval,
+        )
+
+    def bind_button_input_events(
+        self,
+        button_index: int,
+        register: Callable[[Callable[[Any], None]], None],
+    ) -> None:
+        """
+        Bind button input to native hardware events (Hardware → vdSM).
+        """
+        if button_index >= len(self._button_inputs):
+            raise RuntimeError("Button input index out of range")
+
+        self._button_inputs[button_index].bind_to_events(register)
+
+    def bind_action_handlers(self, handlers: Dict[str, Callable]) -> None:
+        """
+        Bind action handlers for this device.
+
+        Supports both full action IDs ("std.identify", "custom.foo") and short names.
+        """
+        self.actions.bind_handlers(handlers)
+
     def add_button_input(
         self,
         name: str,

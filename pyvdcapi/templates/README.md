@@ -44,6 +44,77 @@ When you create a device from a template, you're creating **binding objects** th
 
 This is the **integration point** between your physical devices and the digitalSTROM ecosystem.
 
+### ✅ Single-Step Binding Helpers
+
+The device now provides **one-call binding methods** for all component types.
+These map components to your native variables in a single step:
+
+```python
+# Output channels (bidirectional)
+device.bind_output_channel(
+  DSChannelType.BRIGHTNESS,
+  getter=lambda: native_state["brightness"],
+  setter=lambda value: native_state.__setitem__("brightness", value),
+  poll_interval=0.5,  # optional polling from hardware
+  epsilon=0.1,
+)
+
+# Sensors (hardware → vdSM)
+device.bind_sensor(
+  sensor_index=0,
+  getter=lambda: native_state["temperature"],
+  poll_interval=5.0,
+  epsilon=0.1,
+)
+
+# Binary inputs (hardware → vdSM)
+device.bind_binary_input(
+  input_index=0,
+  getter=lambda: native_state["motion"],
+  poll_interval=0.2,
+)
+
+# Button inputs (hardware → vdSM)
+# event_getter returns next clickType or None
+device.bind_button_input(
+  button_index=0,
+  event_getter=lambda: native_events.pop(0) if native_events else None,
+  poll_interval=0.05,
+)
+```
+
+### ✅ Event-Driven Binding (No Polling)
+
+If your hardware can **push events**, use the event-driven helpers:
+
+```python
+# Output hardware feedback (native → vdSM)
+device.bind_output_channel_events(
+  DSChannelType.BRIGHTNESS,
+  register=lambda cb: hardware.on_brightness_changed(cb),
+)
+
+# Sensor events (native → vdSM)
+device.bind_sensor_events(
+  sensor_index=0,
+  register=lambda cb: hardware.on_temperature_changed(cb),
+)
+
+# Binary input events (native → vdSM)
+device.bind_binary_input_events(
+  input_index=0,
+  register=lambda cb: hardware.on_motion_changed(cb),
+)
+
+# Button events (native → vdSM)
+device.bind_button_input_events(
+  button_index=0,
+  register=lambda cb: hardware.on_button_event(cb),
+)
+```
+
+**Use polling or events depending on your hardware.** Both are supported.
+
 ## Template Types
 
 ### deviceType Templates
@@ -103,12 +174,13 @@ device_config:
         min_value: 0.0
         max_value: 100.0
         resolution: 1.0
-        initial_value_param: CONFIGURABLE
+        value_param: CONFIGURABLE
   
   button_inputs: [...]  # Optional
   sensors: [...]        # Optional
   binary_inputs: [...]  # Optional
   scenes: {...}         # Optional
+  actions: {...}        # Optional (see Actions section)
 ```
 
 ## Organization
@@ -273,7 +345,7 @@ Templates use special keywords to indicate instance-specific values:
   - Example: `name: REQUIRED`, `enumeration: REQUIRED`
   
 - **CONFIGURABLE**: User can optionally override the starting value
-  - Example: `initial_value_param: CONFIGURABLE`
+  - Example: `value_param: CONFIGURABLE`
 
 **Important**: Parameters marked as CONFIGURABLE set the **starting value** for the channel, but the channel remains **fully mutable and bidirectional** after creation. Channels created from templates support:
 - `.subscribe(callback)` - Register hardware update callbacks
@@ -297,6 +369,59 @@ brightness_channel = output.get_channel(DSChannelType.BRIGHTNESS)
 # Channel is now a live, mutable variable with callbacks
 brightness_channel.subscribe(my_hardware_callback)
 ```
+
+## Actions in Templates
+
+Templates can include **actions** (identify, reset, calibrate, etc.).
+The action definitions are saved with the template, but **handlers must be bound**
+when creating a new device from the template.
+
+### How It Works
+
+1. The original device registers actions via `device.actions.add_standard_action()`
+   or `device.actions.add_custom_action()`.
+2. When saving as template, **action definitions** are stored.
+3. When creating from template, **pass handler mappings** to bind behavior.
+
+### Example
+
+```python
+# 1) Original device defines actions
+device.actions.add_standard_action(
+  name="identify",
+  description="Identify device",
+  handler=lambda duration=3.0: hardware.blink(duration),
+)
+
+device.actions.add_custom_action(
+  name="calibrate",
+  title="Calibrate device",
+  action_template="calibration",
+  handler=lambda: hardware.calibrate(),
+)
+
+# 2) Save template (actions are stored automatically)
+device.save_as_template("my_device_with_actions")
+
+# 3) Create from template and bind handlers
+action_handlers = {
+  "std.identify": lambda duration=3.0: hardware.blink(duration),
+  "custom.calibrate": lambda: hardware.calibrate(),
+  # You can also use short names: "identify", "calibrate"
+}
+
+new_device = vdc.create_vdsd_from_template(
+  template_name="my_device_with_actions",
+  instance_name="Kitchen Device",
+  action_handlers=action_handlers,
+)
+
+# Alternatively, bind after creation:
+# new_device.bind_action_handlers(action_handlers)
+```
+
+This ensures templates preserve **what actions exist**, and your device code
+binds **how actions are executed** on the native hardware.
 
 ## Community Sharing
 

@@ -24,7 +24,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pyvdcapi.entities.vdc_host import VdcHost
 from pyvdcapi.core.constants import DSGroup, DSChannelType, DSSensorType, DSButtonType
 from pyvdcapi.templates import TemplateManager, TemplateType
-from pyvdcapi.components.output import Output
 
 
 async def main():
@@ -216,19 +215,20 @@ async def main():
     # Simulate native hardware state
     hardware_state = {"brightness": 0.0}
     
-    # Set up binding: vdSM → Hardware direction
-    async def apply_brightness_to_hardware(channel_type: int, value: float):
-        """Binding callback: Apply vdSM commands to native hardware"""
-        hardware_state["brightness"] = value
-        print(f"         → Native hardware: Brightness = {value}%")
-    
-    brightness_channel.subscribe(apply_brightness_to_hardware)
-    print(f"         ✓ Subscribed to '{demo_light.name}' brightness changes")
+    # Single-step binding (vdSM ←→ Hardware)
+    demo_light.bind_output_channel(
+        DSChannelType.BRIGHTNESS,
+        getter=lambda: hardware_state["brightness"],
+        setter=lambda value: hardware_state.__setitem__("brightness", value),
+        poll_interval=0.1,
+        epsilon=0.1,
+    )
+    print(f"         ✓ Bound '{demo_light.name}' brightness to native variable")
     print()
     
     # Test: vdSM → Hardware direction
     print("         Testing vdSM → Hardware:")
-    await brightness_channel.set_value(50.0)  # vdSM sets value
+    brightness_channel.set_value(50.0)  # vdSM sets value
     print(f"         ✓ Component: {brightness_channel.get_value()}%")
     print(f"         ✓ Native Hardware: {hardware_state['brightness']}%")
     print()
@@ -237,13 +237,13 @@ async def main():
     print("         Testing Hardware → vdSM:")
     print("         (Simulating manual dimmer adjustment)")
     hardware_state["brightness"] = 75.0  # Native hardware changed
-    brightness_channel.update_value(75.0)  # Update component → vdSM
+    await asyncio.sleep(0.2)  # Allow polling to detect change
     print(f"         ✓ Component: {brightness_channel.get_value()}%")
     print(f"         ✓ Push notification sent to vdSM")
     print()
     
     print("      Summary: Channels are LIVE variables with:")
-    print("      • subscribe() - Register hardware callbacks")
+    print("      • bind_output_channel() - One-step binding")
     print("      • set_value() - vdSM → Hardware direction")
     print("      • update_value() - Hardware → vdSM direction")
     print("      • get_value() - Read current state")
@@ -275,20 +275,35 @@ async def main():
             print(f"         → Alert: Temperature high ({value}°C)")
     
     temp_sensor.subscribe(on_temperature_change)
-    print(f"         ✓ Subscribed to temperature sensor")
+    
+    # Single-step binding to native variables
+    sensor_device.bind_sensor(
+        sensor_index=0,
+        getter=lambda: native_sensors["temperature"],
+        poll_interval=0.2,
+        epsilon=0.1,
+    )
+    sensor_device.bind_sensor(
+        sensor_index=1,
+        getter=lambda: native_sensors["humidity"],
+        poll_interval=0.2,
+        epsilon=0.1,
+    )
+
+    print(f"         ✓ Bound temperature + humidity to native variables")
     print()
     
     # Simulate hardware reading
     print("         Testing Hardware → vdSM:")
     native_sensors["temperature"] = 23.5
-    temp_sensor.update_value(23.5)  # Native reading → Component → vdSM
+    await asyncio.sleep(0.3)  # Allow polling to detect change
     print(f"         ✓ Native sensor: {native_sensors['temperature']}°C")
     print(f"         ✓ Component: {temp_sensor.get_value()}°C")
     print(f"         ✓ Push notification sent to vdSM")
     print()
     
     native_sensors["humidity"] = 52.0
-    humidity_sensor.update_value(52.0)
+    await asyncio.sleep(0.3)
     print(f"         ✓ Native humidity: {native_sensors['humidity']}%")
     print(f"         ✓ Component: {humidity_sensor.get_value()}%")
     print()
@@ -310,6 +325,7 @@ async def main():
     
     # Track button events
     button_events = []
+    native_button_events = []
     
     def on_button_event(click_type: int):
         """React to button clicks from native hardware"""
@@ -319,13 +335,21 @@ async def main():
         print(f"         → Button event: {event_name}")
     
     button.on_click(on_button_event)
-    print(f"         ✓ Registered button click callback")
+    
+    # Single-step binding using event queue
+    switch_device.bind_button_input(
+        button_index=0,
+        event_getter=lambda: native_button_events.pop(0) if native_button_events else None,
+        poll_interval=0.05,
+    )
+    print(f"         ✓ Bound button to native event queue")
     print()
     
     # Simulate hardware button press
     print("         Testing Hardware → vdSM:")
     print("         (Simulating physical button press)")
-    button.set_click_type(0)  # Native hardware detected single click
+    native_button_events.append(0)  # Native hardware detected single click
+    await asyncio.sleep(0.1)
     print(f"         ✓ Native hardware: Button pressed")
     print(f"         ✓ Events received: {len(button_events)}")
     print()
@@ -357,20 +381,27 @@ async def main():
         print(f"         → Motion {'detected' if state else 'cleared'}")
     
     motion_input.subscribe(on_motion_change)
-    print(f"         ✓ Subscribed to motion sensor")
+    
+    # Single-step binding to native variable
+    motion_device.bind_binary_input(
+        input_index=0,
+        getter=lambda: native_motion["detected"],
+        poll_interval=0.1,
+    )
+    print(f"         ✓ Bound motion input to native variable")
     print()
     
     # Simulate hardware motion detection
     print("         Testing Hardware → vdSM:")
     native_motion["detected"] = True
-    motion_input.set_state(True)  # Native PIR sensor triggered
+    await asyncio.sleep(0.2)  # Allow polling to detect change
     print(f"         ✓ Native hardware: Motion detected")
     print(f"         ✓ Component state: {motion_input.get_state()}")
     print(f"         ✓ Events received: {len(motion_events)}")
     print()
     
     native_motion["detected"] = False
-    motion_input.set_state(False)
+    await asyncio.sleep(0.2)
     print(f"         ✓ Native hardware: Motion cleared")
     print(f"         ✓ Component state: {motion_input.get_state()}")
     print()
@@ -383,9 +414,11 @@ async def main():
     print("      • The vDC API (digitalSTROM ecosystem)")
     print()
     print("      YOU must connect them via:")
-    print("      • .subscribe() - For receiving vdSM commands")
-    print("      • .update_value() / .set_state() / .set_click_type()")
-    print("        - For sending native hardware state to vdSM")
+    print("      • bind_output_channel() - For outputs (bidirectional)")
+    print("      • bind_sensor() / bind_binary_input() / bind_button_input()")
+    print("        - For inputs (hardware → vdSM)")
+    print("      • OR use *event-driven* helpers (no polling)")
+    print("        bind_*_events(...) for native hardware callbacks")
     print()
     print("      Without these bindings, components are just configuration!")
     print()

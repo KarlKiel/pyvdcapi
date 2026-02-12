@@ -86,6 +86,7 @@ brightness.update_value(80.0)  # Sends notification to vdSM
 
 import logging
 import time
+import asyncio
 from typing import Optional, Any, Dict, Callable, TYPE_CHECKING
 from ..utils.callbacks import Observable
 from ..utils.validators import PropertyValidator
@@ -398,6 +399,82 @@ class OutputChannel:
             callback: Function to remove from subscribers
         """
         self._value_observable.unsubscribe(callback)
+
+    def bind_to(
+        self,
+        getter: Callable[[], Optional[float]],
+        setter: Optional[Callable[..., Any]] = None,
+        poll_interval: Optional[float] = None,
+        epsilon: float = 0.0,
+    ) -> Optional[asyncio.Task]:
+        """
+        Bind this channel to a native hardware value.
+
+        This provides a single-step binding between the vDC channel and
+        a native device variable:
+        - vdSM → Hardware: set_value() triggers setter
+        - Hardware → vdSM: polling getter updates channel
+
+        Args:
+            getter: Function returning current native value (or None if unavailable)
+            setter: Function to apply vdSM value to hardware (optional)
+                Signature can be (value) or (channel_type, value)
+            poll_interval: If set, start polling getter every N seconds
+            epsilon: Minimum change required to publish hardware updates
+
+        Returns:
+            asyncio.Task if polling was started, otherwise None
+        """
+        if setter:
+            def _apply(channel_type: int, value: float) -> None:
+                try:
+                    setter(channel_type, value)
+                except TypeError:
+                    setter(value)
+
+            self.subscribe(_apply)
+
+        if poll_interval is None:
+            return None
+
+        async def _poll() -> None:
+            last_value = getter()
+            if last_value is not None:
+                self.update_value(last_value)
+
+            while True:
+                await asyncio.sleep(poll_interval)
+                current = getter()
+                if current is None:
+                    continue
+                if last_value is None or abs(current - last_value) > epsilon:
+                    self.update_value(current)
+                    last_value = current
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError as exc:
+            raise RuntimeError("bind_to() requires a running event loop for polling") from exc
+
+        return loop.create_task(_poll())
+
+    def bind_to_events(
+        self,
+        register: Callable[[Callable[[float], None]], None],
+    ) -> None:
+        """
+        Bind this channel to native hardware events (Hardware → vdSM).
+
+        This avoids polling by letting the hardware driver push updates.
+
+        Args:
+            register: Function that accepts a callback(value) and registers it
+                      with the native hardware event source.
+        """
+        def _on_event(value: float) -> None:
+            self.update_value(value)
+
+        register(_on_event)
 
     def to_dict(self) -> Dict[str, Any]:
         """

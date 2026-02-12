@@ -60,7 +60,8 @@ use DSButtonStateMachine (separate helper class).
 
 import time
 import logging
-from typing import Optional, Dict, Any, TYPE_CHECKING
+import asyncio
+from typing import Optional, Dict, Any, TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from ..entities.vdsd import VdSD
@@ -394,6 +395,80 @@ class ButtonInput:
         
         # Push property notification to vdSM
         self.vdsd.push_button_state(self.button_id, None)  # Use None to indicate action mode
+
+    def _apply_event(self, event: Any) -> None:
+        """Apply a native button event (clickType or actionId/actionMode)."""
+        if event is None:
+            return
+
+        if isinstance(event, dict):
+            if "click_type" in event:
+                self.set_click_type(int(event["click_type"]))
+                return
+            if "action_id" in event:
+                self.set_action(
+                    int(event["action_id"]),
+                    int(event.get("action_mode", 0))
+                )
+                return
+
+        if isinstance(event, tuple) and len(event) == 2:
+            self.set_action(int(event[0]), int(event[1]))
+            return
+
+        self.set_click_type(int(event))
+
+    def bind_to(
+        self,
+        event_getter: Callable[[], Optional[Any]],
+        poll_interval: float = 0.1,
+    ) -> asyncio.Task:
+        """
+        Bind this button input to native hardware events (Hardware → vdSM).
+
+        The event_getter should return:
+        - int clickType (0-14, 255), OR
+        - dict with keys: {"click_type": int} or {"action_id": int, "action_mode": int}, OR
+        - tuple: (action_id, action_mode)
+
+        Args:
+            event_getter: Function returning the next button event (or None)
+            poll_interval: Poll interval in seconds
+
+        Returns:
+            asyncio.Task for the polling loop
+        """
+        async def _poll() -> None:
+            while True:
+                await asyncio.sleep(poll_interval)
+                event = event_getter()
+                if event is None:
+                    continue
+
+                self._apply_event(event)
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError as exc:
+            raise RuntimeError("bind_to() requires a running event loop") from exc
+
+        return loop.create_task(_poll())
+
+    def bind_to_events(
+        self,
+        register: Callable[[Callable[[Any], None]], None],
+    ) -> None:
+        """
+        Bind this button input to native hardware events (Hardware → vdSM).
+
+        Args:
+            register: Function that accepts a callback(event) and registers it
+                      with the native hardware event source.
+        """
+        def _on_event(event: Any) -> None:
+            self._apply_event(event)
+
+        register(_on_event)
         
     def set_value(self, value: Optional[bool]) -> None:
         """

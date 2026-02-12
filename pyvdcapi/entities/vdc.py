@@ -80,7 +80,7 @@ bedroom_light = hue_vdc.create_vdsd(
 """
 
 import logging
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
+from typing import Dict, List, Optional, Any, TYPE_CHECKING, Callable
 from pyvdcapi.network.genericVDC_pb2 import Message, VDC_SEND_ANNOUNCE_VDC
 
 from ..core.dsuid import DSUIDGenerator, DSUIDNamespace
@@ -354,6 +354,7 @@ class Vdc:
         instance_name: str,
         template_type: str = "deviceType",
         enumeration: Optional[int] = None,
+        action_handlers: Optional[Dict[str, Callable]] = None,
         **instance_params,
     ) -> "VdSD":
         """
@@ -367,7 +368,8 @@ class Vdc:
             instance_name: Name for the new device instance
             template_type: "deviceType" (standard) or "vendorType" (vendor-specific)
             enumeration: Device enumeration number (auto-calculated if not provided)
-            **instance_params: Instance-specific parameters (e.g., initial_brightness=0.0)
+            action_handlers: Optional mapping from action name to handler callable
+            **instance_params: Instance-specific parameters (e.g., brightness=0.0)
 
         Returns:
             Configured VdSD instance
@@ -380,7 +382,7 @@ class Vdc:
             light = vdc.create_vdsd_from_template(
                 template_name="simple_onoff_light",
                 instance_name="Kitchen Light",
-                initial_brightness=0.0
+                brightness=0.0
             )
 
             # Create from vendorType template
@@ -407,6 +409,7 @@ class Vdc:
             template_type=ttype,
             instance_name=instance_name,
             enumeration=enumeration,
+            action_handlers=action_handlers,
             **instance_params,
         )
 
