@@ -115,6 +115,87 @@ device.bind_button_input_events(
 
 **Use polling or events depending on your hardware.** Both are supported.
 
+### ✅ Automatic Input Binding (Config-Driven)
+
+The library automatically determines the correct binding approach based on the **vDC API properties** already defined in your device template. You don't need to specify a separate binding configuration - the component properties tell the system how to bind.
+
+#### Binding Behavior by Component Type
+
+**Buttons** - Always Event-Driven (Push Only)
+- Buttons NEVER need polling
+- Button behavior mode MUST be defined at creation (cannot be changed later)
+- Report EITHER clickType/value (standard mode) OR actionId/actionMode (action mode), never both
+- Both are discrete events, not continuous values
+- Always bind using `register` callback
+
+Example:
+```python
+# Standard mode button (clickType/value)
+button = device.add_button_input(
+    name="Wall Button",
+    button_type=1,
+    use_action_mode=False  # REQUIRED: Standard mode
+)
+
+# Action mode button (actionId/actionMode)  
+scene_button = device.add_button_input(
+    name="Scene Button",
+    button_type=1,
+    use_action_mode=True  # REQUIRED: Action mode
+)
+```
+
+**Binary Inputs** - Property-Driven
+- The `inputType` property defines push vs poll behavior  
+- Bind to `value` (boolean) or `extendedValue` (integer)
+- Use `register` for event-driven, `getter` for polling
+
+**Sensors** - Throttled Push
+- Use existing `min_push_interval` and `changes_only_interval` properties
+- These control throttling for push updates
+- Bind to `value` property
+- Can use both `getter` (polling) and `register` (events) simultaneously
+
+**Output Channels** - Always Bidirectional
+- The output's `push_changes` setting (always True) defines behavior
+- Changes MUST be pushed back to vdSM
+- Bind to channel `value` property
+- Requires both `getter` and `setter`
+
+#### Usage Example
+
+```python
+# 1. Create device from template (vDC properties restored automatically)
+device = vdc.create_vdsd_from_template(
+    template_name="multi_sensor",
+    template_type="deviceType",
+    instance_name="Sensor_1",
+)
+
+# 2. Bind to native hardware - binding behavior determined by vDC API properties
+device.bind_inputs_auto({
+    # Buttons: Always event-driven
+    "buttons": [
+        {"register": hardware.on_button_event},  # register required
+    ],
+    
+    # Binary inputs: Event-driven or polling based on hardware
+    "binary_inputs": [
+        {"register": hardware.on_motion_change},  # Event-driven (preferred)
+        # OR {"getter": hardware.get_door_state, "poll_interval": 0.2},
+    ],
+    
+    # Sensors: Can use both polling and events
+    "sensors": [
+        {"getter": hardware.get_temperature},  # Uses sensor.min_push_interval
+        # OR {"register": hardware.on_temp_change},
+        # OR BOTH for reliability
+    ],
+})
+```
+
+No separate "binding" configuration is needed - the vDC API properties already contain all the information!
+
 ### ✅ Output Channels Always Push
 
 Per vDC documentation (and this implementation), **output channels always push

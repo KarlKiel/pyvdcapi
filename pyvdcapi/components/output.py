@@ -194,9 +194,7 @@ class Output:
         self.vdsd = vdsd
         self.output_function = output_function
         self.output_mode = output_mode
-        # Per vDC API usage in this project: outputs ALWAYS push changes
-        # regardless of configuration. Keep push_changes forced to True.
-        self.push_changes = True
+        self.push_changes = push_changes
 
         # Description properties (API section 4.8.1) - read-only, invariable
         self.default_group = 1  # Default to light group
@@ -562,8 +560,7 @@ class Output:
         if "outputMode" in data:
             self.output_mode = data["outputMode"]
         if "pushChanges" in data:
-            # Outputs ALWAYS push changes; ignore external disable
-            self.push_changes = True
+            self.push_changes = data["pushChanges"]
 
         # Settings properties (section 4.8.2) - DSS → Device (Pattern B)
         # Accept settings nested or top-level
@@ -588,8 +585,8 @@ class Output:
             logger.info(f"Output mode set to {self.output_mode}")
         
         if "pushChanges" in settings:
-            # Outputs ALWAYS push changes; ignore external disable
-            self.push_changes = True
+            self.push_changes = settings["pushChanges"]
+            logger.info(f"Output pushChanges set to {self.push_changes}")
         
         # Light settings
         if "onThreshold" in settings:

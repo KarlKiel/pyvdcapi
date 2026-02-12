@@ -48,7 +48,7 @@ class TemplateManager:
     # Map DSGroup enum values to folder names
     GROUP_FOLDER_MAP = {
         DSGroup.YELLOW: "LIGHT",
-        DSGroup.GREY: "BLINDS",
+        DSGroup.GRAY: "BLINDS",
         DSGroup.BLUE: "HEATING",
         DSGroup.CYAN: "COOLING",
         DSGroup.MAGENTA: "VENTILATION",
@@ -269,9 +269,9 @@ class TemplateManager:
     def _extract_output_config(self, output: "Output") -> Dict[str, Any]:
         """Extract output channel configuration."""
         channels_config = []
-        for channel in output.channels:
+        for channel in output.channels.values():  # .values() to get OutputChannel objects
             channels_config.append({
-                "channel_type": channel.channel_type,
+                "channel_type": int(channel.channel_type),  # Convert enum to int for YAML
                 "min_value": channel.min_value,
                 "max_value": channel.max_value,
                 "resolution": channel.resolution,
@@ -280,21 +280,25 @@ class TemplateManager:
             })
         
         return {
+            "output_function": output.output_function,  # Per vDC API 4.8.1
+            "output_mode": output.output_mode,          # Per vDC API 4.8.2
+            "push_changes": output.push_changes,        # Per vDC API 4.8.2 - critical setting!
             "channels": channels_config,
         }
 
     def _extract_button_config(self, button: "ButtonInput") -> Dict[str, Any]:
-        """Extract button input configuration."""
+        """Extract button input configuration for template."""
         return {
             "button_type": button.button_type,
             "button_id": button.button_id,
             "name": button.name,
             "group": button.group,
             "mode": button.mode,
+            "use_action_mode": button._use_action_mode,  # Save button behavior mode
         }
 
     def _extract_binary_input_config(self, binary_input: "BinaryInput") -> Dict[str, Any]:
-        """Extract binary input configuration."""
+        """Extract binary input configuration for template."""
         return {
             "input_type": binary_input.input_type,
             "input_usage": binary_input.input_usage,
@@ -302,14 +306,16 @@ class TemplateManager:
         }
 
     def _extract_sensor_config(self, sensor: "Sensor") -> Dict[str, Any]:
-        """Extract sensor configuration."""
+        """Extract sensor configuration for template."""
         return {
             "sensor_type": sensor.sensor_type,
+            "unit": sensor.unit,
             "sensor_usage": sensor.sensor_usage,
             "min_value": sensor.min_value,
             "max_value": sensor.max_value,
             "resolution": sensor.resolution,
-            "update_interval": sensor.update_interval,
+            "min_push_interval": sensor.min_push_interval,
+            "changes_only_interval": sensor.changes_only_interval,
             "name": sensor.name,
         }
 
@@ -383,8 +389,8 @@ class TemplateManager:
             name=instance_name,
             model=device_config.get("model", "Unknown"),
             primary_group=primary_group,
-            mac_address=vdc.host.mac_address,
-            vendor_id=vdc.host.vendor_id,
+            mac_address=vdc.host._mac_address,  # Access private attribute
+            vendor_id=vdc.host._vendor_id,      # Access private attribute
             enumeration=enumeration,
             model_uid=device_config.get("model_uid"),
             model_version=device_config.get("model_version", "1.0"),
@@ -505,10 +511,12 @@ class TemplateManager:
         if not channels_config:
             return
         
-        # Create output
-        output = device.create_output()
+        # Extract Output-level properties (vDC API 4.8.1 & 4.8.2)
+        output_function = output_config.get("output_function", "dimmer")
+        output_mode = output_config.get("output_mode", "gradual")
+        push_changes = output_config.get("push_changes", True)
         
-        # Add each channel
+        # Add each channel - first channel creates the Output with the settings
         for idx, channel_config in enumerate(channels_config):
             # Get instance-specific value or use default (0.0)
             # Support multiple parameter naming schemes for backward compatibility
@@ -522,12 +530,16 @@ class TemplateManager:
                 )
             )
             
-            output.add_output_channel(
+            device.add_output_channel(
                 channel_type=channel_config["channel_type"],
                 min_value=channel_config["min_value"],
                 max_value=channel_config["max_value"],
                 resolution=channel_config.get("resolution", 1.0),
                 initial_value=value,
+                # Pass Output-level properties (extracted before creating OutputChannel)
+                output_function=output_function,
+                output_mode=output_mode,
+                push_changes=push_changes,
             )
 
     def _apply_button_configs(self, device: "VdSD", button_configs: List[Dict[str, Any]]):
@@ -537,6 +549,7 @@ class TemplateManager:
                 button_type=button_config["button_type"],
                 button_id=button_config.get("button_id", 0),
                 name=button_config.get("name", "Button"),
+                use_action_mode=button_config.get("use_action_mode", False),  # Restore behavior mode
                 group=button_config.get("group", 1),
                 mode=button_config.get("mode", 0),
             )
@@ -544,24 +557,32 @@ class TemplateManager:
     def _apply_binary_input_configs(self, device: "VdSD", binary_configs: List[Dict[str, Any]]):
         """Apply binary input configurations from template."""
         for binary_config in binary_configs:
-            device.add_binary_input(
+            binary_input = device.add_binary_input(
                 input_type=binary_config["input_type"],
-                input_usage=binary_config.get("input_usage"),
                 name=binary_config.get("name", "Binary Input"),
             )
+            # Set input_usage after creation (it's a property, not a constructor parameter)
+            if "input_usage" in binary_config:
+                binary_input.input_usage = binary_config["input_usage"]
 
     def _apply_sensor_configs(self, device: "VdSD", sensor_configs: List[Dict[str, Any]]):
         """Apply sensor configurations from template."""
         for sensor_config in sensor_configs:
-            device.add_sensor(
+            sensor = device.add_sensor(
                 sensor_type=sensor_config["sensor_type"],
-                sensor_usage=sensor_config.get("sensor_usage"),
+                unit=sensor_config.get("unit", ""),
                 min_value=sensor_config.get("min_value", 0.0),
                 max_value=sensor_config.get("max_value", 100.0),
                 resolution=sensor_config.get("resolution", 1.0),
-                update_interval=sensor_config.get("update_interval", 60),
                 name=sensor_config.get("name", "Sensor"),
             )
+            # Set additional properties after creation
+            if "sensor_usage" in sensor_config:
+                sensor.sensor_usage = sensor_config["sensor_usage"]
+            if "min_push_interval" in sensor_config:
+                sensor.min_push_interval = sensor_config["min_push_interval"]
+            if "changes_only_interval" in sensor_config:
+                sensor.changes_only_interval = sensor_config["changes_only_interval"]
 
     def load_template(
         self,

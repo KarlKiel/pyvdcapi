@@ -1,0 +1,36 @@
+vdc_host:
+  dSUID: 00000000D66A76283662AD6D7925000000
+  type: vDChost
+  name: TestVdcHost
+  model: vDC Host
+  model_uid: vdc-host
+  model_version: '1.0'
+  vendor_id: KarlKiel
+  api_version: '2.0'
+vdcs:
+  00000001D66A76283662AD6D7925000000:
+    dSUID: 00000001D66A76283662AD6D7925000000
+    type: vDC
+    model: Integration Test vDC
+    model_uid: integration-test-vdc
+    model_version: '1.0'
+    vendor_id: KarlKiel
+    enumeration: 0
+    name: TestVDC
+vdsds:
+  00000002D66A76283662AD6D7925000001:
+    dSUID: 00000002D66A76283662AD6D7925000001
+    type: vDSD
+    vdc_dSUID: 00000001D66A76283662AD6D7925000000
+    name: TestDevicePush
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 1
+  00000002D66A76283662AD6D7925000002:
+    dSUID: 00000002D66A76283662AD6D7925000002
+    type: vDSD
+    vdc_dSUID: 00000001D66A76283662AD6D7925000000
+    name: TestDeviceControlOnly
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 2

@@ -22,6 +22,11 @@ This folder contains runnable examples that demonstrate how to use the `pyvdcapi
   - Create multiple devices from templates
   - List, inspect, and manage templates
   - Community sharing workflow
+- **`07_automatic_binding.py`** — **Property-driven hardware binding**
+  - Buttons: Always event-driven (no polling)
+  - Binary inputs: Property-driven binding selection
+  - Sensors: Throttled push with vDC API properties
+  - Outputs: Always bidirectional (push_changes=True)
 
 ### Network & Discovery
 - **`service_announcement_demo.py`** — Full demo with mDNS/DNS-SD auto-discovery

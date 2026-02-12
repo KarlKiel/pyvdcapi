@@ -1,0 +1,68 @@
+template_metadata:
+  template_name: ExampleTemplateAllFeaturesOutputPushed
+  description: Complete example device with bidirectional output (pushChanges=True)
+  vendor: null
+  vendor_model_id: null
+  created_from_model: Complete Example Device
+device_config:
+  model: Complete Example Device
+  model_uid: complete-example-device
+  model_version: '1.0'
+  primary_group: 0
+  instance_parameters:
+    name: REQUIRED
+    enumeration: REQUIRED
+  output:
+    output_function: dimmer
+    output_mode: gradual
+    push_changes: true
+    channels:
+    - channel_type: 1
+      min_value: 0.0
+      max_value: 100.0
+      resolution: 0.1
+      value_param: CONFIGURABLE
+  button_inputs:
+  - button_type: 1
+    button_id: 0
+    name: Button ClickType
+    group: 1
+    mode: 0
+    use_action_mode: false
+  - button_type: 1
+    button_id: 1
+    name: Button ActionID
+    group: 1
+    mode: 0
+    use_action_mode: true
+  binary_inputs:
+  - input_type: contact
+    input_usage: 0
+    name: Binary Contact
+  - input_type: motion
+    input_usage: 0
+    name: Binary Motion
+  sensors:
+  - sensor_type: temperature
+    unit: "\xB0C"
+    sensor_usage: 0
+    min_value: -20.0
+    max_value: 60.0
+    resolution: 0.1
+    min_push_interval: 5.0
+    changes_only_interval: 300.0
+    name: Temperature Sensor
+  actions:
+    deviceActionDescriptions: []
+    standardActions:
+    - name: std.identify
+      action: identify
+      params:
+        duration:
+          type: numeric
+          min: 1.0
+          max: 60.0
+          siunit: s
+          default: 3.0
+      description: Identify device by blinking or audible signal
+    customActions: []
