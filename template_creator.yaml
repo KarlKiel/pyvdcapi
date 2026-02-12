@@ -1,0 +1,132 @@
+vdc_host:
+  dSUID: 0000000000B86EE4E8AD56D7B015000000
+  type: vDChost
+  name: Template Creator
+  model: vDC Host
+  model_uid: vdc-host
+  model_version: '1.0'
+  vendor_id: TemplateCreator
+  api_version: '2.0'
+vdcs:
+  0000000100B86EE4E8AD56D7B015000000:
+    dSUID: 0000000100B86EE4E8AD56D7B015000000
+    type: vDC
+    model: Creator v1.0
+    model_uid: creator-v1-0
+    model_version: '1.0'
+    vendor_id: TemplateCreator
+    enumeration: 0
+    name: Example Templates VdC
+vdsds:
+  0000000200B86EE4E8AD56D7B015000000:
+    dSUID: 0000000200B86EE4E8AD56D7B015000000
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 0
+  0000000200B86EE4E8AD56D7B015000001:
+    dSUID: 0000000200B86EE4E8AD56D7B015000001
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 1
+  0000000200B86EE4E8AD56D7B015000002:
+    dSUID: 0000000200B86EE4E8AD56D7B015000002
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 2
+  0000000200B86EE4E8AD56D7B015000003:
+    dSUID: 0000000200B86EE4E8AD56D7B015000003
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 3
+  0000000200B86EE4E8AD56D7B015000004:
+    dSUID: 0000000200B86EE4E8AD56D7B015000004
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 4
+  0000000200B86EE4E8AD56D7B015000005:
+    dSUID: 0000000200B86EE4E8AD56D7B015000005
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 5
+  0000000200B86EE4E8AD56D7B015000006:
+    dSUID: 0000000200B86EE4E8AD56D7B015000006
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 6
+  0000000200B86EE4E8AD56D7B015000007:
+    dSUID: 0000000200B86EE4E8AD56D7B015000007
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 7
+  0000000200B86EE4E8AD56D7B015000008:
+    dSUID: 0000000200B86EE4E8AD56D7B015000008
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 8
+  0000000200B86EE4E8AD56D7B015000009:
+    dSUID: 0000000200B86EE4E8AD56D7B015000009
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputControlOnly
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 9
+  0000000200B86EE4E8AD56D7B01500000A:
+    dSUID: 0000000200B86EE4E8AD56D7B01500000A
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 10
+  0000000200B86EE4E8AD56D7B01500000B:
+    dSUID: 0000000200B86EE4E8AD56D7B01500000B
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputControlOnly
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 11
+  0000000200B86EE4E8AD56D7B01500000C:
+    dSUID: 0000000200B86EE4E8AD56D7B01500000C
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputPushed
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 12
+  0000000200B86EE4E8AD56D7B01500000D:
+    dSUID: 0000000200B86EE4E8AD56D7B01500000D
+    type: vDSD
+    vdc_dSUID: 0000000100B86EE4E8AD56D7B015000000
+    name: AllFeaturesOutputControlOnly
+    model: Complete Example Device
+    primaryGroup: 0
+    enumeration: 13

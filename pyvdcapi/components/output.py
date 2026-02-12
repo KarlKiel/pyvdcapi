@@ -122,7 +122,7 @@ class Output:
     - output_id: Unique identifier within device
     - output_function: Type of output (dimmer, colordimmer, etc.)
     - output_mode: How output operates (disabled/binary/gradual)
-    - push_changes: Whether to immediately push value changes
+    - push_changes: Always true (outputs always push value changes)
 
     Channel Management:
     - channels: Dictionary of OutputChannel objects by type
@@ -375,8 +375,8 @@ class Output:
         # Set the value
         channel.set_value(value, transition_time=transition_time)
 
-        # Trigger push notification if push_changes is enabled
-        if self.push_changes and apply_now:
+        # Outputs ALWAYS push changes (apply_now controls only local echo)
+        if apply_now:
             self._notify_value_change(channel_type, value)
 
         return True
@@ -520,7 +520,7 @@ class Output:
                 "activeGroup": self.active_group,
                 "groups": self.groups,
                 "mode": self._map_mode_to_enum(self.output_mode),
-                "pushChanges": self.push_changes,
+                "pushChanges": True,
                 # Light settings
                 "onThreshold": self.on_threshold,
                 "minBrightness": self.min_brightness,
@@ -586,6 +586,7 @@ class Output:
         
         if "pushChanges" in settings:
             self.push_changes = settings["pushChanges"]
+            logger.info(f"Output pushChanges set to {self.push_changes}")
         
         # Light settings
         if "onThreshold" in settings:

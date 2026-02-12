@@ -332,6 +332,30 @@ class ActionManager:
 
         logger.info(f"Added custom action: {action_id}")
 
+    def bind_handlers(self, handlers: Dict[str, Callable]) -> None:
+        """
+        Bind action handlers by name.
+
+        Supports both full action IDs ("std.identify", "custom.foo")
+        and short names ("identify", "foo").
+        """
+        for name, handler in handlers.items():
+            if name in self._standard_actions or name in self._custom_actions or name in self._dynamic_actions:
+                self._handlers[name] = handler
+                continue
+
+            std_name = f"std.{name}"
+            if std_name in self._standard_actions:
+                self._handlers[std_name] = handler
+                continue
+
+            custom_name = f"custom.{name}"
+            if custom_name in self._custom_actions:
+                self._handlers[custom_name] = handler
+                continue
+
+            self._handlers[name] = handler
+
     def has_action(self, action_name: str) -> bool:
         """
         Check if action exists.

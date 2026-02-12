@@ -724,7 +724,12 @@ class VdSD:
         
         from ..components.output_channel import OutputChannel
 
-        # Create the output channel
+        # Extract Output-level properties (these are NOT for OutputChannel)
+        output_function = properties.pop("output_function", "dimmer")
+        output_mode = properties.pop("output_mode", "gradual")
+        push_changes = properties.pop("push_changes", True)
+
+        # Create the output channel (with remaining channel-specific properties)
         channel = OutputChannel(
             vdsd=self,
             channel_type=channel_type,
@@ -742,8 +747,9 @@ class VdSD:
 
             self._output = Output(
                 vdsd=self,
-                output_function=properties.get("output_function", "dimmer"),
-                output_mode=properties.get("output_mode", "gradual"),
+                output_function=output_function,
+                output_mode=output_mode,
+                push_changes=push_changes,
             )
 
         # Add channel to THE output (singular)
@@ -753,12 +759,300 @@ class VdSD:
 
         return channel
 
+    def bind_output_channel(
+        self,
+        channel_type: int,
+        getter: Callable[[], Optional[float]],
+        setter: Optional[Callable[..., Any]] = None,
+        poll_interval: Optional[float] = None,
+        epsilon: float = 0.0,
+    ):
+        """
+        Bind an output channel to a native hardware value (single-step).
+
+        Args:
+            channel_type: DSChannelType enum value
+            getter: Function returning native hardware value
+            setter: Function applying vdSM value to hardware (optional)
+            poll_interval: If set, poll native value every N seconds
+            epsilon: Minimum change required to publish updates
+        """
+        if self._output is None:
+            raise RuntimeError("Device has no output to bind")
+
+        from ..core.constants import DSChannelType
+
+        try:
+            ch_type = DSChannelType(channel_type)
+        except ValueError:
+            ch_type = channel_type
+
+        channel = self._output.get_channel(ch_type)
+        if channel is None:
+            raise RuntimeError(f"Output channel {channel_type} not found")
+
+        return channel.bind_to(
+            getter=getter,
+            setter=setter,
+            poll_interval=poll_interval,
+            epsilon=epsilon,
+        )
+
+    def bind_output_channel_events(
+        self,
+        channel_type: int,
+        register: Callable[[Callable[[float], None]], None],
+    ) -> None:
+        """
+        Bind output channel to native hardware events (Hardware → vdSM).
+        """
+        if self._output is None:
+            raise RuntimeError("Device has no output to bind")
+
+        from ..core.constants import DSChannelType
+
+        try:
+            ch_type = DSChannelType(channel_type)
+        except ValueError:
+            ch_type = channel_type
+
+        channel = self._output.get_channel(ch_type)
+        if channel is None:
+            raise RuntimeError(f"Output channel {channel_type} not found")
+
+        channel.bind_to_events(register)
+
+    def bind_sensor(
+        self,
+        sensor_index: int,
+        getter: Callable[[], Optional[float]],
+        poll_interval: float,
+        epsilon: float = 0.0,
+    ):
+        """
+        Bind a sensor to a native hardware value (Hardware → vdSM).
+
+        Args:
+            sensor_index: Index of sensor in device
+            getter: Function returning native sensor value
+            poll_interval: Poll interval in seconds
+            epsilon: Minimum change required to publish updates
+        """
+        if sensor_index >= len(self._sensors):
+            raise RuntimeError("Sensor index out of range")
+
+        return self._sensors[sensor_index].bind_to(
+            getter=getter,
+            poll_interval=poll_interval,
+            epsilon=epsilon,
+        )
+
+    def bind_sensor_events(
+        self,
+        sensor_index: int,
+        register: Callable[[Callable[[float], None]], None],
+    ) -> None:
+        """
+        Bind sensor to native hardware events (Hardware → vdSM).
+        """
+        if sensor_index >= len(self._sensors):
+            raise RuntimeError("Sensor index out of range")
+
+        self._sensors[sensor_index].bind_to_events(register)
+
+    def bind_binary_input(
+        self,
+        input_index: int,
+        getter: Callable[[], Optional[bool]],
+        poll_interval: float,
+    ):
+        """
+        Bind a binary input to a native hardware state (Hardware → vdSM).
+
+        Args:
+            input_index: Index of binary input in device
+            getter: Function returning native state
+            poll_interval: Poll interval in seconds
+        """
+        if input_index >= len(self._binary_inputs):
+            raise RuntimeError("Binary input index out of range")
+
+        return self._binary_inputs[input_index].bind_to(
+            getter=getter,
+            poll_interval=poll_interval,
+        )
+
+    def bind_binary_input_events(
+        self,
+        input_index: int,
+        register: Callable[[Callable[[bool], None]], None],
+    ) -> None:
+        """
+        Bind binary input to native hardware events (Hardware → vdSM).
+        """
+        if input_index >= len(self._binary_inputs):
+            raise RuntimeError("Binary input index out of range")
+
+        self._binary_inputs[input_index].bind_to_events(register)
+
+    def bind_button_input(
+        self,
+        button_index: int,
+        event_getter: Callable[[], Optional[Any]],
+        poll_interval: float = 0.1,
+    ):
+        """
+        Bind a button input to native hardware events (Hardware → vdSM).
+
+        Args:
+            button_index: Index of button input in device
+            event_getter: Function returning the next button event
+            poll_interval: Poll interval in seconds
+        """
+        if button_index >= len(self._button_inputs):
+            raise RuntimeError("Button input index out of range")
+
+        return self._button_inputs[button_index].bind_to(
+            event_getter=event_getter,
+            poll_interval=poll_interval,
+        )
+
+    def bind_button_input_events(
+        self,
+        button_index: int,
+        register: Callable[[Callable[[Any], None]], None],
+    ) -> None:
+        """
+        Bind button input to native hardware events (Hardware → vdSM).
+        """
+        if button_index >= len(self._button_inputs):
+            raise RuntimeError("Button input index out of range")
+
+        self._button_inputs[button_index].bind_to_events(register)
+
+    def bind_inputs_auto(self, bindings: Dict[str, Any]) -> None:
+        """
+        Automatically bind inputs to native device variables based on their vDC API properties.
+        
+        The binding behavior is determined by the component's vDC API properties (already saved in templates):
+        
+        - **Buttons**: ALWAYS use event-driven binding (push only). Buttons never need polling
+          because they report discrete events - EITHER clickType/value (standard mode) OR
+          actionId/actionMode (action mode), never both.
+          
+        - **Binary Inputs**: Check the inputType property to determine push vs poll behavior.
+          Bind to the 'value' or 'extendedValue' property (boolean or integer).
+          
+        - **Sensors**: Use the component's min_push_interval and changes_only_interval properties.
+          These define throttling for push updates. Bind to the 'value' property.
+          
+        - **Output Channels**: The output's push_changes setting (always True) determines that
+          bi-directional binding is required. Bind to channel 'value' property.
+        
+        Args:
+            bindings: Dict mapping component types to their native hardware bindings:
+                {
+                    "sensors": [{"getter": fn, "register": fn (optional)}],
+                    "binary_inputs": [{"getter": fn, "register": fn (optional)}],
+                    "buttons": [{"register": fn}],  # Only event-driven, no polling
+                    "outputs": [{"getter": fn, "setter": fn}],  # Always bidirectional
+                }
+        
+        Example:
+            # Create device from template (vDC properties restored automatically)
+            device = vdc.create_vdsd_from_template("temp_sensor", "deviceType", "Sensor1")
+            
+            # Bind to native hardware - behavior determined by vDC properties
+            device.bind_inputs_auto({
+                "sensors": [{"getter": hardware.get_temperature}],  
+                "buttons": [{"register": hardware.on_button_event}],  # Always event-driven
+                "outputs": [{"getter": hardware.get_brightness, "setter": hardware.set_brightness}],
+            })
+        """
+        def _iter_entries(entries):
+            if entries is None:
+                return []
+            if isinstance(entries, list):
+                return list(enumerate(entries))
+            return list(entries.items())
+
+        # Buttons - ALWAYS event-driven (no polling needed)
+        for idx, cfg in _iter_entries(bindings.get("buttons")):
+            if idx >= len(self._button_inputs):
+                continue
+            register = cfg.get("register")
+            if not register:
+                raise RuntimeError(f"Button {idx}: 'register' is required (buttons are always event-driven)")
+            self.bind_button_input_events(idx, register)
+
+        # Binary inputs - Use vDC API properties to determine behavior
+        for idx, cfg in _iter_entries(bindings.get("binary_inputs")):
+            if idx >= len(self._binary_inputs):
+                continue
+            binary_input = self._binary_inputs[idx]
+            getter = cfg.get("getter")
+            register = cfg.get("register")
+            
+            # If hardware provides event interface, use it (preferred)
+            if register:
+                self.bind_binary_input_events(idx, register)
+            # Otherwise use polling with component's update_interval (if getter provided)
+            elif getter:
+                # Use a reasonable poll interval (could be derived from update_interval if needed)
+                poll_interval = cfg.get("poll_interval", 0.2)
+                self.bind_binary_input(idx, getter=getter, poll_interval=poll_interval)
+            else:
+                raise RuntimeError(f"Binary input {idx}: requires 'getter' or 'register'")
+
+        # Sensors - Use vDC API properties (min_push_interval, changes_only_interval)
+        for idx, cfg in _iter_entries(bindings.get("sensors")):
+            if idx >= len(self._sensors):
+                continue
+            sensor = self._sensors[idx]
+            getter = cfg.get("getter")
+            register = cfg.get("register")
+            
+            # If hardware provides event interface, use it (for fast/critical sensors)
+            if register:
+                self.bind_sensor_events(idx, register)
+            # Also set up polling if getter provided (can be used alongside events)
+            if getter:
+                # Use component's min_push_interval as poll interval guidance
+                poll_interval = cfg.get("poll_interval", sensor.min_push_interval)
+                epsilon = cfg.get("epsilon", 0.0)
+                self.bind_sensor(idx, getter=getter, poll_interval=poll_interval, epsilon=epsilon)
+            
+            if not getter and not register:
+                raise RuntimeError(f"Sensor {idx}: requires 'getter' or 'register'")
+            register = cfg.get("register")
+
+            if mode in ("event", "push") and register:
+                self.bind_button_input_events(idx, register)
+            if mode in ("poll", "pull"):
+                if event_getter is None:
+                    raise RuntimeError("Button binding requires event_getter for polling")
+                self.bind_button_input(idx, event_getter=event_getter, poll_interval=poll_interval)
+            if mode == "mixed":
+                if register:
+                    self.bind_button_input_events(idx, register)
+                if event_getter is not None:
+                    self.bind_button_input(idx, event_getter=event_getter, poll_interval=poll_interval)
+
+    def bind_action_handlers(self, handlers: Dict[str, Callable]) -> None:
+        """
+        Bind action handlers for this device.
+
+        Supports both full action IDs ("std.identify", "custom.foo") and short names.
+        """
+        self.actions.bind_handlers(handlers)
+
     def add_button_input(
         self,
         name: str,
         button_type: int = 0,
         button_id: Optional[int] = None,
         button_element_id: int = 0,
+        use_action_mode: bool = False,
         **properties
     ) -> "ButtonInput":
         """
@@ -773,6 +1067,12 @@ class VdSD:
         
         **IMPORTANT**: This method cannot be called after the device has been
         announced to vdSM. Device structure is immutable after announcement.
+        
+        **Button Behavior Mode (REQUIRED at creation)**:
+        Buttons operate in one of two modes - this MUST be defined at creation:
+        - Standard mode (use_action_mode=False): Reports clickType/value
+        - Action mode (use_action_mode=True): Reports actionId/actionMode
+        The mode cannot be changed after creation.
         
         Args:
             name: Human-readable button name (e.g., "Light Switch")
@@ -795,6 +1095,9 @@ class VdSD:
                 6 - lower left
                 7 - upper right
                 8 - lower right
+            use_action_mode: Button behavior mode (REQUIRED):
+                False (default) - Standard mode: reports clickType (0-14, 255) and value (bool)
+                True - Action mode: reports actionId (scene id) and actionMode (0=normal, 1=force, 2=undo)
             **properties: Additional settings (group, function, mode, channel, etc.)
         
         Returns:
@@ -804,16 +1107,26 @@ class VdSD:
             RuntimeError: If device has already been announced to vdSM
         
         Example:
-            # Simple button (hardware provides clickType directly)
+            # Standard mode button (clickType/value)
             button = device.add_button_input(
                 name="Power Button",
-                button_type=1  # Single pushbutton
+                button_type=1,  # Single pushbutton
+                use_action_mode=False  # Standard mode (clickType/value)
             )
             
             # Hardware reports click events
             button.set_click_type(0)  # tip_1x (single tap)
             button.set_click_type(1)  # tip_2x (double tap)
-            button.set_click_type(4)  # hold_start (long press)
+            
+            # Action mode button (actionId/actionMode)
+            scene_button = device.add_button_input(
+                name="Scene 5 Button",
+                button_type=1,  # Single pushbutton
+                use_action_mode=True  # Action mode (actionId/actionMode)
+            )
+            
+            # Hardware reports scene calls
+            scene_button.set_action(action_id=5, action_mode=0)  # Call scene 5
             
             # Multi-element navigation button (up element)
             nav_up = device.add_button_input(
@@ -854,15 +1167,17 @@ class VdSD:
             button_type=button_type,
             button_id=button_id,
             button_element_id=button_element_id,
+            use_action_mode=use_action_mode,
             **properties
         )
 
         # Add to device collection
         self._button_inputs.append(button_input)
 
+        mode_str = "action mode (actionId/actionMode)" if use_action_mode else "standard mode (clickType/value)"
         logger.info(
             f"Added button input '{name}' (id={button_id}, type={button_type}, "
-            f"element={button_element_id}) to vdSD {self.dsuid}"
+            f"element={button_element_id}, {mode_str}) to vdSD {self.dsuid}"
         )
 
         return button_input
@@ -2037,3 +2352,59 @@ class VdSD:
         self._persistence.set_vdsd(self.dsuid, config)
 
         logger.info(f"Saved configuration for vdSD {self.dsuid}")
+
+    def save_as_template(
+        self,
+        template_name: str,
+        template_type: str = "deviceType",
+        description: Optional[str] = None,
+        vendor: Optional[str] = None,
+        vendor_model_id: Optional[str] = None,
+    ) -> str:
+        """
+        Save this device configuration as a reusable template.
+
+        Templates allow creating new device instances with the same configuration
+        but minimal instance-specific information (name, enumeration).
+
+        Args:
+            template_name: Unique name for the template
+            template_type: "deviceType" (standard hardware) or "vendorType" (vendor-specific)
+            description: Optional human-readable description
+            vendor: Optional vendor name (recommended for vendorType)
+            vendor_model_id: Optional vendor model identifier
+
+        Returns:
+            Path to the created template file
+
+        Example:
+            # Save as standard device type
+            light.save_as_template(
+                template_name="simple_onoff_light",
+                template_type="deviceType",
+                description="Simple on/off light with 50% threshold"
+            )
+
+            # Save as vendor-specific type
+            hue_light.save_as_template(
+                template_name="philips_hue_lily_spot",
+                template_type="vendorType",
+                description="Philips HUE Lily Garden Spot",
+                vendor="Philips",
+                vendor_model_id="915005730801"
+            )
+        """
+        from pyvdcapi.templates import TemplateManager, TemplateType
+
+        template_mgr = TemplateManager()
+        ttype = TemplateType.VENDOR_TYPE if template_type == "vendorType" else TemplateType.DEVICE_TYPE
+
+        return template_mgr.save_device_as_template(
+            vdsd=self,
+            template_name=template_name,
+            template_type=ttype,
+            description=description,
+            vendor=vendor,
+            vendor_model_id=vendor_model_id,
+        )
+

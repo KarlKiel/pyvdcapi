@@ -112,6 +112,7 @@ asyncio.create_task(poll_power())
 
 import logging
 import time
+import asyncio
 from typing import Optional, Callable, Dict, Any
 from typing import TYPE_CHECKING
 from ..utils.callbacks import Observable
@@ -505,6 +506,60 @@ class Sensor:
             callback: Function to remove from subscribers
         """
         self._change_observable.unsubscribe(callback)
+
+    def bind_to(
+        self,
+        getter: Callable[[], Optional[float]],
+        poll_interval: float,
+        epsilon: float = 0.0,
+    ) -> asyncio.Task:
+        """
+        Bind this sensor to a native hardware value (Hardware → vdSM).
+
+        Args:
+            getter: Function returning current native sensor value (or None if unavailable)
+            poll_interval: Poll interval in seconds
+            epsilon: Minimum change required to publish updates
+
+        Returns:
+            asyncio.Task for the polling loop
+        """
+        async def _poll() -> None:
+            last_value = getter()
+            if last_value is not None:
+                self.update_value(last_value)
+
+            while True:
+                await asyncio.sleep(poll_interval)
+                current = getter()
+                if current is None:
+                    continue
+                if last_value is None or abs(current - last_value) > epsilon:
+                    self.update_value(current)
+                    last_value = current
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError as exc:
+            raise RuntimeError("bind_to() requires a running event loop") from exc
+
+        return loop.create_task(_poll())
+
+    def bind_to_events(
+        self,
+        register: Callable[[Callable[[float], None]], None],
+    ) -> None:
+        """
+        Bind this sensor to native hardware events (Hardware → vdSM).
+
+        Args:
+            register: Function that accepts a callback(value) and registers it
+                      with the native hardware event source.
+        """
+        def _on_event(value: float) -> None:
+            self.update_value(value)
+
+        register(_on_event)
 
     def to_dict(self) -> Dict[str, Any]:
         """

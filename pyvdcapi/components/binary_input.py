@@ -96,6 +96,7 @@ door.on_change(on_door_change)
 
 import logging
 import time
+import asyncio
 from typing import Optional, Callable, Dict, Any, TYPE_CHECKING
 from ..utils.callbacks import Observable
 
@@ -329,6 +330,59 @@ class BinaryInput:
             callback: Function to remove from subscribers
         """
         self._change_observable.unsubscribe(callback)
+
+    def bind_to(
+        self,
+        getter: Callable[[], Optional[bool]],
+        poll_interval: float,
+    ) -> asyncio.Task:
+        """
+        Bind this binary input to a native hardware state (Hardware → vdSM).
+
+        Args:
+            getter: Function returning current native state (True/False)
+            poll_interval: Poll interval in seconds
+
+        Returns:
+            asyncio.Task for the polling loop
+        """
+        async def _poll() -> None:
+            last_state = getter()
+            if last_state is not None:
+                self.set_state(bool(last_state))
+
+            while True:
+                await asyncio.sleep(poll_interval)
+                current = getter()
+                if current is None:
+                    continue
+                current = bool(current)
+                if last_state is None or current != last_state:
+                    self.set_state(current)
+                    last_state = current
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError as exc:
+            raise RuntimeError("bind_to() requires a running event loop") from exc
+
+        return loop.create_task(_poll())
+
+    def bind_to_events(
+        self,
+        register: Callable[[Callable[[bool], None]], None],
+    ) -> None:
+        """
+        Bind this binary input to native hardware events (Hardware → vdSM).
+
+        Args:
+            register: Function that accepts a callback(state) and registers it
+                      with the native hardware event source.
+        """
+        def _on_event(state: bool) -> None:
+            self.set_state(state)
+
+        register(_on_event)
 
     def to_dict(self) -> Dict[str, Any]:
         """
