@@ -194,44 +194,52 @@ async def main():
     print()
     
     # IMPORTANT: Demonstrate bidirectional binding
-    print("   📌 BIDIRECTIONAL BINDING DEMONSTRATION:")
-    print("      Templates create REAL channels with full callback support!")
+    print("   📌 HARDWARE BINDING DEMONSTRATION:")
+    print("      Templates create components that are the BINDING LAYER")
+    print("      between your native hardware and the vDC API!")
+    print()
+    print("      Components support bidirectional communication:")
+    print("      • Native Hardware → Component → vdSM")
+    print("      • vdSM → Component → Native Hardware")
     print()
     
-    # Get the first light's brightness channel
+    # ═══════════════════════════════════════════════════════════════
+    # OUTPUT CHANNEL BINDING (Bidirectional: vdSM ←→ Hardware)
+    # ═══════════════════════════════════════════════════════════════
+    print("      A) OUTPUT CHANNEL BINDING (Brightness)")
+    print("      ─────────────────────────────────────")
+    
     demo_light = created_lights[0]
     output = demo_light.get_output()
     brightness_channel = output.get_channel(DSChannelType.BRIGHTNESS)
     
-    # Hardware state storage (simulating actual hardware)
+    # Simulate native hardware state
     hardware_state = {"brightness": 0.0}
     
-    # Set up bidirectional binding via callback
+    # Set up binding: vdSM → Hardware direction
     async def apply_brightness_to_hardware(channel_type: int, value: float):
-        """Direction 1: vdSM → Hardware (when vdSM changes value)"""
+        """Binding callback: Apply vdSM commands to native hardware"""
         hardware_state["brightness"] = value
-        print(f"      → Hardware updated: Brightness set to {value}%")
+        print(f"         → Native hardware: Brightness = {value}%")
     
-    # Subscribe to channel changes
     brightness_channel.subscribe(apply_brightness_to_hardware)
-    print(f"      ✓ Callback registered for '{demo_light.name}'")
+    print(f"         ✓ Subscribed to '{demo_light.name}' brightness changes")
     print()
     
-    # Simulate vdSM changing brightness (Direction 1: vdSM → Hardware)
-    print("      Testing Direction 1 (vdSM → Hardware):")
-    await brightness_channel.set_value(50.0)  # vdSM sets brightness
-    print(f"      ✓ Channel value: {brightness_channel.get_value()}%")
-    print(f"      ✓ Hardware state: {hardware_state['brightness']}%")
+    # Test: vdSM → Hardware direction
+    print("         Testing vdSM → Hardware:")
+    await brightness_channel.set_value(50.0)  # vdSM sets value
+    print(f"         ✓ Component: {brightness_channel.get_value()}%")
+    print(f"         ✓ Native Hardware: {hardware_state['brightness']}%")
     print()
     
-    # Simulate hardware changing brightness manually (Direction 2: Hardware → vdSM)
-    print("      Testing Direction 2 (Hardware → vdSM):")
-    print("      (Simulating manual dimmer adjustment to 75%)")
-    hardware_state["brightness"] = 75.0  # Hardware changed
-    brightness_channel.update_value(75.0)  # Notify vdSM
-    print(f"      ✓ Channel value: {brightness_channel.get_value()}%")
-    print(f"      ✓ Hardware state: {hardware_state['brightness']}%")
-    print(f"      ✓ Push notification sent to vdSM automatically")
+    # Test: Hardware → vdSM direction
+    print("         Testing Hardware → vdSM:")
+    print("         (Simulating manual dimmer adjustment)")
+    hardware_state["brightness"] = 75.0  # Native hardware changed
+    brightness_channel.update_value(75.0)  # Update component → vdSM
+    print(f"         ✓ Component: {brightness_channel.get_value()}%")
+    print(f"         ✓ Push notification sent to vdSM")
     print()
     
     print("      Summary: Channels are LIVE variables with:")
@@ -239,6 +247,147 @@ async def main():
     print("      • set_value() - vdSM → Hardware direction")
     print("      • update_value() - Hardware → vdSM direction")
     print("      • get_value() - Read current state")
+    print()
+    
+    # ═══════════════════════════════════════════════════════════════
+    # SENSOR BINDING (Hardware → vdSM)
+    # ═══════════════════════════════════════════════════════════════
+    print("      B) SENSOR BINDING (Temperature)")
+    print("      ────────────────────────────────")
+    
+    # Create device with sensor
+    sensor_device = vdc.create_vdsd_from_template(
+        template_name="temperature_humidity_sensor",
+        instance_name="Living Room Climate",
+        template_type="deviceType",
+    )
+    
+    temp_sensor = sensor_device._sensors[0]
+    humidity_sensor = sensor_device._sensors[1]
+    
+    # Simulate native hardware
+    native_sensors = {"temperature": 20.0, "humidity": 45.0}
+    
+    # Set up binding: Hardware → vdSM (sensors are read-only from vdSM)
+    def on_temperature_change(sensor_type: int, value: float):
+        """React to temperature changes"""
+        if value > 25.0:
+            print(f"         → Alert: Temperature high ({value}°C)")
+    
+    temp_sensor.subscribe(on_temperature_change)
+    print(f"         ✓ Subscribed to temperature sensor")
+    print()
+    
+    # Simulate hardware reading
+    print("         Testing Hardware → vdSM:")
+    native_sensors["temperature"] = 23.5
+    temp_sensor.update_value(23.5)  # Native reading → Component → vdSM
+    print(f"         ✓ Native sensor: {native_sensors['temperature']}°C")
+    print(f"         ✓ Component: {temp_sensor.get_value()}°C")
+    print(f"         ✓ Push notification sent to vdSM")
+    print()
+    
+    native_sensors["humidity"] = 52.0
+    humidity_sensor.update_value(52.0)
+    print(f"         ✓ Native humidity: {native_sensors['humidity']}%")
+    print(f"         ✓ Component: {humidity_sensor.get_value()}%")
+    print()
+    
+    # ═══════════════════════════════════════════════════════════════
+    # BUTTON BINDING (Hardware → vdSM)
+    # ═══════════════════════════════════════════════════════════════
+    print("      C) BUTTON BINDING (Click Detection)")
+    print("      ─────────────────────────────────────")
+    
+    # Create device with button
+    switch_device = vdc.create_vdsd_from_template(
+        template_name="wall_switch_single_button",
+        instance_name="Kitchen Wall Switch",
+        template_type="deviceType",
+    )
+    
+    button = switch_device._button_inputs[0]
+    
+    # Track button events
+    button_events = []
+    
+    def on_button_event(click_type: int):
+        """React to button clicks from native hardware"""
+        click_names = {0: "Single Click", 1: "Double Click", 7: "Confirmed Click"}
+        event_name = click_names.get(click_type, f"Click Type {click_type}")
+        button_events.append(event_name)
+        print(f"         → Button event: {event_name}")
+    
+    button.on_click(on_button_event)
+    print(f"         ✓ Registered button click callback")
+    print()
+    
+    # Simulate hardware button press
+    print("         Testing Hardware → vdSM:")
+    print("         (Simulating physical button press)")
+    button.set_click_type(0)  # Native hardware detected single click
+    print(f"         ✓ Native hardware: Button pressed")
+    print(f"         ✓ Events received: {len(button_events)}")
+    print()
+    
+    # ═══════════════════════════════════════════════════════════════
+    # BINARY INPUT BINDING (Hardware → vdSM)
+    # ═══════════════════════════════════════════════════════════════
+    print("      D) BINARY INPUT BINDING (Motion Detection)")
+    print("      ──────────────────────────────────────────────")
+    
+    # Create simple device with binary input for demo
+    motion_device = vdc.create_vdsd(
+        name="Motion Detector",
+        model="PIR Sensor",
+        primary_group=DSGroup.YELLOW,
+    )
+    motion_input = motion_device.add_binary_input(
+        input_type=1,  # PRESENCE
+        name="Motion Sensor"
+    )
+    
+    # Native hardware state
+    native_motion = {"detected": False}
+    motion_events = []
+    
+    def on_motion_change(input_type: int, state: bool):
+        """React to motion detection from native hardware"""
+        motion_events.append(state)
+        print(f"         → Motion {'detected' if state else 'cleared'}")
+    
+    motion_input.subscribe(on_motion_change)
+    print(f"         ✓ Subscribed to motion sensor")
+    print()
+    
+    # Simulate hardware motion detection
+    print("         Testing Hardware → vdSM:")
+    native_motion["detected"] = True
+    motion_input.set_state(True)  # Native PIR sensor triggered
+    print(f"         ✓ Native hardware: Motion detected")
+    print(f"         ✓ Component state: {motion_input.get_state()}")
+    print(f"         ✓ Events received: {len(motion_events)}")
+    print()
+    
+    native_motion["detected"] = False
+    motion_input.set_state(False)
+    print(f"         ✓ Native hardware: Motion cleared")
+    print(f"         ✓ Component state: {motion_input.get_state()}")
+    print()
+    
+    # ═══════════════════════════════════════════════════════════════
+    print("      📌 KEY TAKEAWAY:")
+    print("      ───────────────")
+    print("      Components are the BINDING LAYER between:")
+    print("      • Your native hardware (physical devices)")
+    print("      • The vDC API (digitalSTROM ecosystem)")
+    print()
+    print("      YOU must connect them via:")
+    print("      • .subscribe() - For receiving vdSM commands")
+    print("      • .update_value() / .set_state() / .set_click_type()")
+    print("        - For sending native hardware state to vdSM")
+    print()
+    print("      Without these bindings, components are just configuration!")
     print()
 
     # Create 2 smart dimmers from vendorType template

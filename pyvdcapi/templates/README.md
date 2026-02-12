@@ -2,6 +2,48 @@
 
 This directory contains reusable device configuration templates for pyvdcapi. Templates enable quick deployment of common device configurations and facilitate community sharing of device configs.
 
+## 🔗 Hardware Binding Layer
+
+**IMPORTANT**: Templates create device components (channels, sensors, buttons, binary inputs) that act as the **binding layer between your native hardware and the virtual vDC device**. These components are NOT static values - they are live, bidirectional variables that:
+
+- **Map hardware state to vDC API**: Your hardware updates → component → vdSM
+- **Map vDC commands to hardware**: vdSM commands → component → your hardware
+- **Support callbacks**: Subscribe to changes in both directions
+- **Remain mutable**: Can be updated throughout device lifetime
+
+### Bidirectional Flow Example
+
+```
+Native Hardware     ←→     Component (Binding)     ←→     vdSM/digitalSTROM
+─────────────────         ─────────────────────         ──────────────────
+Physical dimmer           OutputChannel                 vDC API
+  brightness=75%          .update_value(75)   →         Push notification
+                          .subscribe(callback) ←        SET_OUTPUT request
+  set_pwm(50%)      ←     callback(50.0)
+
+Temperature sensor        Sensor                        vDC API
+  temp=23.5°C             .update_value(23.5) →         Push notification
+                          .subscribe(callback)          GET_PROPERTY request
+
+Motion detector           BinaryInput                   vDC API
+  motion=true             .set_state(True)    →         State notification
+                          .subscribe(callback)          Automation trigger
+
+Physical button           ButtonInput                   vDC API
+  pressed                 .set_click_type(0)  →         Button event
+                          .on_click(callback)           Scene trigger
+```
+
+### Why This Matters
+
+When you create a device from a template, you're creating **binding objects** that:
+1. ✅ Receive updates FROM your hardware (sensors reading, button presses)
+2. ✅ Send commands TO your hardware (brightness changes, state changes)
+3. ✅ Synchronize with vdSM automatically
+4. ✅ Trigger your callbacks for hardware integration
+
+This is the **integration point** between your physical devices and the digitalSTROM ecosystem.
+
 ## Template Types
 
 ### deviceType Templates
@@ -127,35 +169,75 @@ device = vdc.create_vdsd_from_template(
     brightness=0.0,  # Starting value for the brightness channel
 )
 
-# IMPORTANT: Templates create REAL channels with full bidirectional binding!
-# Get the brightness channel
+# ═══════════════════════════════════════════════════════════════
+# CRITICAL: Set up hardware binding after creation!
+# ═══════════════════════════════════════════════════════════════
+# Components are the BINDING LAYER between hardware and vDC API
+# You MUST connect them to your native hardware for bidirectional flow
+
+# 1. OUTPUT BINDING (vdSM ←→ Hardware)
 output = device.get_output()
 brightness_channel = output.get_channel(DSChannelType.BRIGHTNESS)
 
-# Set up hardware callback for bidirectional control
 async def apply_to_hardware(channel_type: int, value: float):
     """Called when vdSM changes the brightness value"""
-    print(f"Applying brightness {value}% to physical hardware")
+    print(f"Setting native hardware brightness to {value}%")
     await my_hardware_driver.set_brightness(value)
 
-# Register callback
-brightness_channel.subscribe(apply_to_hardware)
+brightness_channel.subscribe(apply_to_hardware)  # vdSM → Hardware
 
-# Now the channel works bidirectionally:
-# vdSM → Hardware: brightness_channel.set_value(50.0) → triggers callback
-# Hardware → vdSM: brightness_channel.update_value(75.0) → sends push notification
+# Update from hardware (e.g., manual dimmer knob turned)
+brightness_channel.update_value(75.0)  # Hardware → vdSM
 
-# Create multiple devices from the same template
-for i in range(1, 6):
-    device = vdc.create_vdsd_from_template(
-        template_name="philips_hue_lily_garden_spot",
-        instance_name=f"Garden Spot {i}",
-        template_type="vendorType",
-        brightness=0.0,
-        hue=120.0,  # Starting hue (green)
-    )
-    # Each device gets independent, fully functional channels
+# 2. SENSOR BINDING (Hardware → vdSM)
+if device._sensors:
+    temp_sensor = device._sensors[0]
+    
+    # Your hardware polling loop
+    async def poll_temperature():
+        while True:
+            temp = await my_hardware_driver.read_temperature()
+            temp_sensor.update_value(temp)  # Native value → vdSM
+            await asyncio.sleep(60)
+    
+    # Optional: React to sensor changes
+    def on_temp_change(sensor_type: int, value: float):
+        if value > 30.0:
+            print("Temperature alert!")
+    temp_sensor.subscribe(on_temp_change)
+
+# 3. BUTTON BINDING (Hardware → vdSM)
+if device._button_inputs:
+    button = device._button_inputs[0]
+    
+    # Your hardware interrupt handler
+    def on_physical_button_press():
+        # Detect click type from your hardware
+        click_type = detect_click_pattern()  # Your logic
+        button.set_click_type(click_type)  # Native event → vdSM
+    
+    my_hardware.register_interrupt(on_physical_button_press)
+
+# 4. BINARY INPUT BINDING (Hardware → vdSM)
+if device._binary_inputs:
+    motion = device._binary_inputs[0]
+    
+    # Your hardware state change handler
+    def on_motion_detected(active: bool):
+        motion.set_state(active)  # Native state → vdSM
+    
+    my_hardware.on_motion_change(on_motion_detected)
+    
+    # Optional: React to motion
+    def on_motion_callback(input_type: int, state: bool):
+        if state:
+            print("Motion detected!")
+    motion.subscribe(on_motion_callback)
 ```
+
+**Summary**: Templates create the components, YOU create the hardware binding by:
+- Subscribing to component callbacks (for vdSM → Hardware direction)
+- Calling `.update_value()`, `.set_state()`, `.set_click_type()` (for Hardware → vdSM direction)
 
 ### Managing Templates
 
