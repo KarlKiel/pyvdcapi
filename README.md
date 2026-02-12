@@ -70,7 +70,7 @@ async def main():
     # Create device
     device = vdc.create_vdsd(
         name="Living Room Light",
-        primary_group=DSGroup.YELLOW  # Yellow = Lights
+        primary_group=DSGroup.LIGHT  # Light group (ID=1, Color=Yellow)
     )
     
     # Add brightness control

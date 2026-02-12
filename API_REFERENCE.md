@@ -62,7 +62,7 @@ async def main():
     device = vdc.create_vdsd(
         name="Ceiling Light",
         model="DimmableLED",
-        primary_group=DSGroup.YELLOW  # Light group (Yellow=1)
+        primary_group=DSGroup.LIGHT  # Light group (ID=1, Color=Yellow)
     )
     
     # 4. Add output channel

@@ -82,7 +82,7 @@ Usage Example:
 dimmer = vdc.create_vdsd(
     name="Living Room Dimmer",
     model="Dimmer 1CH",
-    primary_group=DSGroup.YELLOW  # Yellow group = Light (value 1)
+    primary_group=DSGroup.LIGHT  # Light group (ID=1, Color=Yellow)
 )
 
 # Add output channel
@@ -230,7 +230,7 @@ class VdSD:
                 vdc=my_vdc,
                 name="Kitchen Light",
                 model="Dimmer 1CH",
-                primary_group=DSGroup.YELLOW,
+                primary_group=DSGroup.LIGHT,
                 mac_address="00:11:22:33:44:55",
                 vendor_id="MyCompany",
                 enumeration=5,  # 5th device

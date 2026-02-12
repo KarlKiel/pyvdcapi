@@ -95,7 +95,7 @@ def validate_complex_device_creation(vdc):
         model="Advanced Sensor Plus",
         model_uid="advanced-sensor-plus",
         model_version="3.2",
-        primary_group=DSGroup.YELLOW,  # Light group
+        primary_group=DSGroup.LIGHT,  # Light group
         displayId="SN-12345",  # Physical label on device
         hardwareGuid="uuid:a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         vendorName="TestVendor",

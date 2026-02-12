@@ -79,12 +79,12 @@ async def test_vdc_utility_methods():
         device1 = vdc2.create_vdsd(
             name="Temperature Sensor",
             model="TempSensor",
-            primary_group=DSGroup.YELLOW
+            primary_group=DSGroup.LIGHT
         )
         device2 = vdc2.create_vdsd(
             name="Humidity Sensor",
             model="HumSensor",
-            primary_group=DSGroup.YELLOW
+            primary_group=DSGroup.LIGHT
         )
         print(f"  Added device1: {device1.dsuid}")
         print(f"  Added device2: {device2.dsuid}")

@@ -73,14 +73,14 @@ async def main():
     hue_light1 = hue_vdc.create_vdsd(
         name="Living Room Light",
         model="Hue White",
-        primary_group=DSGroup.YELLOW
+        primary_group=DSGroup.LIGHT
     )
     print(f"   Added device to Hue vDC: {hue_light1._common_props.get_property('name')}")
     
     hue_light2 = hue_vdc.create_vdsd(
         name="Bedroom Light",
         model="Hue White",
-        primary_group=DSGroup.YELLOW
+        primary_group=DSGroup.LIGHT
     )
     print(f"   Added device to Hue vDC: {hue_light2._common_props.get_property('name')}")
     

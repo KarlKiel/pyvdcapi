@@ -64,7 +64,7 @@ light_vdc = host.create_vdc(
 dimmer = light_vdc.create_vdsd(
     name="Living Room Dimmer",
     model="Dimmer 1ch",
-    primary_group=DSGroup.YELLOW,
+    primary_group=DSGroup.LIGHT,
     # output_function can be passed in **properties
 )
 

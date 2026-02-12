@@ -100,7 +100,7 @@ async def main():
     device = vdc.create_vdsd(
         name="Living Room Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW
+        primary_group=DSGroup.LIGHT
     )
     
     # Start the host

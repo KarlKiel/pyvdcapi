@@ -103,21 +103,40 @@ class DSScene(IntEnum):
 
 class DSGroup(IntEnum):
     """
-    Standard digitalSTROM group (color) numbers.
+    Standard digitalSTROM group (functional) numbers.
 
     Groups represent functional classes of devices.
+    Note: Multiple groups can share the same color (e.g., BLUE is used for
+    Heating, Cooling, Ventilation, Window, Recirculation, Temperature Control,
+    and Apartment Ventilation).
     """
 
-    YELLOW = 1  # Light
-    GRAY = 2  # Blinds/Shades
-    BLUE = 3  # Heating
-    CYAN = 4  # Audio
-    MAGENTA = 5  # Video
-    RED = 6  # Security
-    GREEN = 7  # Access
-    BLACK = 8  # Joker (multi-purpose)
-    WHITE = 9  # Cooling
-    UNDEFINED = 0  # Undefined/not assigned
+    UNDEFINED = 0  # Single Device/undefined (WHITE or Undefined/not assigned)
+    LIGHT = 1  # Light (YELLOW)
+    BLINDS = 2  # Blinds/Shades (GRAY)
+    HEATING = 3  # Heating (BLUE)
+    AUDIO = 4  # Audio (CYAN)
+    VIDEO = 5  # Video (MAGENTA)
+    SECURITY = 6  # Security (RED)
+    ACCESS = 7  # Access (GREEN)
+    JOKER = 8  # Joker/multi-purpose (BLACK)
+    COOLING = 9  # Cooling (BLUE)
+    VENTILATION = 10  # Ventilation (BLUE)
+    WINDOW = 11  # Window (BLUE)
+    RECIRCULATION = 12  # Recirculation (BLUE)
+    TEMPERATURE_CONTROL = 48  # Temperature Control (BLUE)
+    APARTMENT_VENTILATION = 64  # Apartment Ventilation (BLUE)
+
+    # Backwards compatibility aliases (deprecated, use function names instead)
+    YELLOW = 1  # Use LIGHT instead
+    GRAY = 2  # Use BLINDS instead
+    BLUE = 3  # Use HEATING instead (note: multiple groups use blue color)
+    CYAN = 4  # Use AUDIO instead
+    MAGENTA = 5  # Use VIDEO instead
+    RED = 6  # Use SECURITY instead
+    GREEN = 7  # Use ACCESS instead
+    BLACK = 8  # Use JOKER instead
+    WHITE = 0  # Use UNDEFINED instead (note: COOLING also exists as group 9)
 
 
 class DSChannelType(IntEnum):
@@ -568,18 +587,42 @@ CHANNEL_TYPE_NAMES: Dict[int, str] = {
 }
 
 
-# Group names
+# Group names (maps group ID to function name)
 GROUP_NAMES: Dict[int, str] = {
-    DSGroup.YELLOW: "Light",
-    DSGroup.GRAY: "Blinds",
-    DSGroup.BLUE: "Heating",
-    DSGroup.CYAN: "Audio",
-    DSGroup.MAGENTA: "Video",
-    DSGroup.RED: "Security",
-    DSGroup.GREEN: "Access",
-    DSGroup.BLACK: "Joker",
-    DSGroup.WHITE: "Cooling",
-    DSGroup.UNDEFINED: "Undefined",
+    0: "Undefined",
+    1: "Light",
+    2: "Blinds",
+    3: "Heating",
+    4: "Audio",
+    5: "Video",
+    6: "Security",
+    7: "Access",
+    8: "Joker",
+    9: "Cooling",
+    10: "Ventilation",
+    11: "Window",
+    12: "Recirculation",
+    48: "Temperature Control",
+    64: "Apartment Ventilation",
+}
+
+# Group colors (maps group ID to digitalSTROM color)
+GROUP_COLORS: Dict[int, str] = {
+    0: "WHITE",  # or Undefined
+    1: "YELLOW",
+    2: "GRAY",
+    3: "BLUE",
+    4: "CYAN",
+    5: "MAGENTA",
+    6: "RED",
+    7: "GREEN",
+    8: "BLACK",
+    9: "BLUE",
+    10: "BLUE",
+    11: "BLUE",
+    12: "BLUE",
+    48: "BLUE",
+    64: "BLUE",
 }
 
 
@@ -591,6 +634,23 @@ def get_channel_name(channel_type: int) -> str:
 def get_group_name(group: int) -> str:
     """Get human-readable name for a group."""
     return GROUP_NAMES.get(group, "Unknown")
+
+
+def get_group_color(group: int) -> str:
+    """
+    Get digitalSTROM color for a group.
+    
+    Note: Multiple groups can share the same color (e.g., BLUE is used for
+    Heating, Cooling, Ventilation, Window, Recirculation, Temperature Control,
+    and Apartment Ventilation).
+    
+    Args:
+        group: Group number (DSGroup enum value)
+    
+    Returns:
+        Color name (e.g., "YELLOW", "BLUE", "RED") or "UNKNOWN"
+    """
+    return GROUP_COLORS.get(group, "UNKNOWN")
 
 
 def get_default_scene_config(scene_number: int) -> Dict[str, Any]:

@@ -62,7 +62,7 @@ def create_test_device():
         vdc=MockVdC(),
         name="Test Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:01",
         vendor_id="TestVendor"
     )

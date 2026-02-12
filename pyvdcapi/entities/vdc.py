@@ -294,7 +294,7 @@ class Vdc:
             dimmer = vdc.create_vdsd(
                 name="Kitchen Dimmer",
                 model="Dimmer 1CH",
-                primary_group=DSGroup.YELLOW,  # Light
+                primary_group=DSGroup.LIGHT,  # Light group
                 model_uid="dimmer-1ch",
                 model_version="1.0",
                 output_function=DSOutputFunction.DIMMER,

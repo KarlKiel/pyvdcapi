@@ -73,13 +73,13 @@ async def main():
     print()
 
     # Add some devices
-    dimmer = light_vdc.create_vdsd(name="Living Room Dimmer", model="Dimmer 1ch", primary_group=DSGroup.YELLOW)
+    dimmer = light_vdc.create_vdsd(name="Living Room Dimmer", model="Dimmer 1ch", primary_group=DSGroup.LIGHT)
     dimmer.add_output_channel(channel_type=DSChannelType.BRIGHTNESS, channel_id="brightness", resolution=1.0)
     print(f"✓ Created device: {dimmer._common_props.get_name()}")
     print(f"  dSUID: {dimmer.dsuid}")
     print()
 
-    switch = light_vdc.create_vdsd(name="Kitchen Light Switch", model="Switch 1ch", primary_group=DSGroup.YELLOW)
+    switch = light_vdc.create_vdsd(name="Kitchen Light Switch", model="Switch 1ch", primary_group=DSGroup.LIGHT)
     switch.add_output_channel(channel_type=DSChannelType.BRIGHTNESS, channel_id="brightness", resolution=1.0)
     print(f"✓ Created device: {switch._common_props.get_name()}")
     print(f"  dSUID: {switch.dsuid}")
