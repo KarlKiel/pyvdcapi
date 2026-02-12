@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pyvdcapi.entities.vdc_host import VdcHost
 from pyvdcapi.core.constants import DSGroup, DSChannelType, DSSensorType, DSButtonType
 from pyvdcapi.templates import TemplateManager, TemplateType
+from pyvdcapi.components.output import Output
 
 
 async def main():
@@ -180,14 +181,64 @@ async def main():
     
     # Create 3 simple lights from deviceType template
     print("   a) Creating 3 simple lights from template:")
+    created_lights = []
     for i in range(1, 4):
         light = vdc.create_vdsd_from_template(
             template_name="simple_onoff_light",
             instance_name=f"Living Room Light {i}",
             template_type="deviceType",
-            initial_brightness=0.0,
+            brightness=0.0,  # Starting value for the channel
         )
         print(f"      ✓ {light.name} (dSUID: {light.dsuid})")
+        created_lights.append(light)
+    print()
+    
+    # IMPORTANT: Demonstrate bidirectional binding
+    print("   📌 BIDIRECTIONAL BINDING DEMONSTRATION:")
+    print("      Templates create REAL channels with full callback support!")
+    print()
+    
+    # Get the first light's brightness channel
+    demo_light = created_lights[0]
+    output = demo_light.get_output()
+    brightness_channel = output.get_channel(DSChannelType.BRIGHTNESS)
+    
+    # Hardware state storage (simulating actual hardware)
+    hardware_state = {"brightness": 0.0}
+    
+    # Set up bidirectional binding via callback
+    async def apply_brightness_to_hardware(channel_type: int, value: float):
+        """Direction 1: vdSM → Hardware (when vdSM changes value)"""
+        hardware_state["brightness"] = value
+        print(f"      → Hardware updated: Brightness set to {value}%")
+    
+    # Subscribe to channel changes
+    brightness_channel.subscribe(apply_brightness_to_hardware)
+    print(f"      ✓ Callback registered for '{demo_light.name}'")
+    print()
+    
+    # Simulate vdSM changing brightness (Direction 1: vdSM → Hardware)
+    print("      Testing Direction 1 (vdSM → Hardware):")
+    await brightness_channel.set_value(50.0)  # vdSM sets brightness
+    print(f"      ✓ Channel value: {brightness_channel.get_value()}%")
+    print(f"      ✓ Hardware state: {hardware_state['brightness']}%")
+    print()
+    
+    # Simulate hardware changing brightness manually (Direction 2: Hardware → vdSM)
+    print("      Testing Direction 2 (Hardware → vdSM):")
+    print("      (Simulating manual dimmer adjustment to 75%)")
+    hardware_state["brightness"] = 75.0  # Hardware changed
+    brightness_channel.update_value(75.0)  # Notify vdSM
+    print(f"      ✓ Channel value: {brightness_channel.get_value()}%")
+    print(f"      ✓ Hardware state: {hardware_state['brightness']}%")
+    print(f"      ✓ Push notification sent to vdSM automatically")
+    print()
+    
+    print("      Summary: Channels are LIVE variables with:")
+    print("      • subscribe() - Register hardware callbacks")
+    print("      • set_value() - vdSM → Hardware direction")
+    print("      • update_value() - Hardware → vdSM direction")
+    print("      • get_value() - Read current state")
     print()
 
     # Create 2 smart dimmers from vendorType template
@@ -197,7 +248,7 @@ async def main():
             template_name="acme_smart_dimmer_pro",
             instance_name=f"Bedroom Dimmer {i}",
             template_type="vendorType",
-            initial_brightness=0.0,
+            brightness=0.0,  # Starting value
         )
         print(f"      ✓ {dimmer.name} (dSUID: {dimmer.dsuid})")
         print(f"         Sensors: {len(dimmer._sensors)}, Outputs: {len(dimmer._output.channels) if dimmer._output else 0}")

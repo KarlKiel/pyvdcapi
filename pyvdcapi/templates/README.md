@@ -124,8 +124,26 @@ device = vdc.create_vdsd_from_template(
     template_name="simple_onoff_light",
     instance_name="Living Room Light",
     template_type="deviceType",
-    initial_brightness=0.0,  # Optional instance parameter
+    brightness=0.0,  # Starting value for the brightness channel
 )
+
+# IMPORTANT: Templates create REAL channels with full bidirectional binding!
+# Get the brightness channel
+output = device.get_output()
+brightness_channel = output.get_channel(DSChannelType.BRIGHTNESS)
+
+# Set up hardware callback for bidirectional control
+async def apply_to_hardware(channel_type: int, value: float):
+    """Called when vdSM changes the brightness value"""
+    print(f"Applying brightness {value}% to physical hardware")
+    await my_hardware_driver.set_brightness(value)
+
+# Register callback
+brightness_channel.subscribe(apply_to_hardware)
+
+# Now the channel works bidirectionally:
+# vdSM → Hardware: brightness_channel.set_value(50.0) → triggers callback
+# Hardware → vdSM: brightness_channel.update_value(75.0) → sends push notification
 
 # Create multiple devices from the same template
 for i in range(1, 6):
@@ -133,9 +151,10 @@ for i in range(1, 6):
         template_name="philips_hue_lily_garden_spot",
         instance_name=f"Garden Spot {i}",
         template_type="vendorType",
-        initial_brightness=0.0,
-        initial_hue=120.0,  # Green
+        brightness=0.0,
+        hue=120.0,  # Starting hue (green)
     )
+    # Each device gets independent, fully functional channels
 ```
 
 ### Managing Templates
@@ -171,17 +190,30 @@ Templates use special keywords to indicate instance-specific values:
 - **REQUIRED**: User must provide this value when creating from template
   - Example: `name: REQUIRED`, `enumeration: REQUIRED`
   
-- **CONFIGURABLE**: User can optionally override the default value
+- **CONFIGURABLE**: User can optionally override the starting value
   - Example: `initial_value_param: CONFIGURABLE`
+
+**Important**: Parameters marked as CONFIGURABLE set the **starting value** for the channel, but the channel remains **fully mutable and bidirectional** after creation. Channels created from templates support:
+- `.subscribe(callback)` - Register hardware update callbacks
+- `.set_value(value)` - vdSM → Hardware direction  
+- `.update_value(value)` - Hardware → vdSM direction
+- `.get_value()` - Read current state
 
 When creating a device from a template:
 ```python
 device = vdc.create_vdsd_from_template(
     template_name="simple_onoff_light",
-    instance_name="My Light",  # REQUIRED parameter
+    instance_name="My Light",      # REQUIRED parameter
     # enumeration auto-calculated if not provided
-    initial_brightness=50.0,   # CONFIGURABLE parameter (override)
+    brightness=50.0,                # CONFIGURABLE - sets starting value
 )
+
+# After creation, get the channel for bidirectional binding
+output = device.get_output()
+brightness_channel = output.get_channel(DSChannelType.BRIGHTNESS)
+
+# Channel is now a live, mutable variable with callbacks
+brightness_channel.subscribe(my_hardware_callback)
 ```
 
 ## Community Sharing

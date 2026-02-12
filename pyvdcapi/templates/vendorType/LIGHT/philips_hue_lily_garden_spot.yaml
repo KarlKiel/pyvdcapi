@@ -31,28 +31,28 @@ device_config:
         min_value: 0.0
         max_value: 100.0
         resolution: 0.1
-        initial_value_param: CONFIGURABLE
+        value_param: CONFIGURABLE  # Starting value (channel remains fully mutable)
       
       # Hue channel
       - channel_type: 2  # HUE
         min_value: 0.0
         max_value: 360.0
         resolution: 1.0
-        initial_value_param: CONFIGURABLE
+        value_param: CONFIGURABLE  # Starting value (channel remains fully mutable)
       
       # Saturation channel
       - channel_type: 3  # SATURATION
         min_value: 0.0
         max_value: 100.0
         resolution: 0.1
-        initial_value_param: CONFIGURABLE
+        value_param: CONFIGURABLE  # Starting value (channel remains fully mutable)
       
       # Color temperature channel
       - channel_type: 4  # COLOR_TEMPERATURE
         min_value: 2000.0  # Warm white
         max_value: 6500.0  # Cool white
         resolution: 10.0
-        initial_value_param: CONFIGURABLE
+        value_param: CONFIGURABLE  # Starting value (channel remains fully mutable)
   
   # Standard color scenes
   scenes:

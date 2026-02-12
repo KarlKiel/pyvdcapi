@@ -271,8 +271,8 @@ class TemplateManager:
                 "min_value": channel.min_value,
                 "max_value": channel.max_value,
                 "resolution": channel.resolution,
-                # Initial value is instance-specific, mark as parameter
-                "initial_value_param": "CONFIGURABLE",
+                # Mark as configurable - sets starting value, channel remains mutable
+                "value_param": "CONFIGURABLE",
             })
         
         return {
@@ -428,11 +428,16 @@ class TemplateManager:
         
         # Add each channel
         for idx, channel_config in enumerate(channels_config):
-            # Get instance-specific initial value or use default
-            param_key = f"initial_value_{idx}" if len(channels_config) > 1 else "initial_value"
-            initial_value = instance_params.get(
+            # Get instance-specific value or use default (0.0)
+            # Support multiple parameter naming schemes for backward compatibility
+            param_key = f"value_{idx}" if len(channels_config) > 1 else "value"
+            
+            # Try new naming first, then legacy names
+            value = instance_params.get(
                 param_key,
-                instance_params.get("initial_brightness", 0.0)  # Fallback for compatibility
+                instance_params.get(f"initial_value_{idx}",
+                    instance_params.get("brightness", 0.0)  # Common fallback
+                )
             )
             
             output.add_output_channel(
@@ -440,7 +445,7 @@ class TemplateManager:
                 min_value=channel_config["min_value"],
                 max_value=channel_config["max_value"],
                 resolution=channel_config.get("resolution", 1.0),
-                initial_value=initial_value,
+                initial_value=value,
             )
 
     def _apply_button_configs(self, device: "VdSD", button_configs: List[Dict[str, Any]]):

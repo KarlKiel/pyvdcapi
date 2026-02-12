@@ -20,7 +20,7 @@ device_config:
         min_value: 0.0
         max_value: 100.0
         resolution: 0.1
-        initial_value_param: CONFIGURABLE
+        value_param: CONFIGURABLE  # Starting value (channel remains fully mutable)
   
   # Standard scene definitions
   scenes:

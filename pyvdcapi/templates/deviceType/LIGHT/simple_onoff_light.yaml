@@ -22,4 +22,4 @@ device_config:
         min_value: 0.0
         max_value: 100.0
         resolution: 1.0
-        initial_value_param: CONFIGURABLE  # User can override during instantiation
+        value_param: CONFIGURABLE  # Starting value (channel remains fully mutable)
