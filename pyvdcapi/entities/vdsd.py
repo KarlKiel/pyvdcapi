@@ -2037,3 +2037,59 @@ class VdSD:
         self._persistence.set_vdsd(self.dsuid, config)
 
         logger.info(f"Saved configuration for vdSD {self.dsuid}")
+
+    def save_as_template(
+        self,
+        template_name: str,
+        template_type: str = "deviceType",
+        description: Optional[str] = None,
+        vendor: Optional[str] = None,
+        vendor_model_id: Optional[str] = None,
+    ) -> str:
+        """
+        Save this device configuration as a reusable template.
+
+        Templates allow creating new device instances with the same configuration
+        but minimal instance-specific information (name, enumeration).
+
+        Args:
+            template_name: Unique name for the template
+            template_type: "deviceType" (standard hardware) or "vendorType" (vendor-specific)
+            description: Optional human-readable description
+            vendor: Optional vendor name (recommended for vendorType)
+            vendor_model_id: Optional vendor model identifier
+
+        Returns:
+            Path to the created template file
+
+        Example:
+            # Save as standard device type
+            light.save_as_template(
+                template_name="simple_onoff_light",
+                template_type="deviceType",
+                description="Simple on/off light with 50% threshold"
+            )
+
+            # Save as vendor-specific type
+            hue_light.save_as_template(
+                template_name="philips_hue_lily_spot",
+                template_type="vendorType",
+                description="Philips HUE Lily Garden Spot",
+                vendor="Philips",
+                vendor_model_id="915005730801"
+            )
+        """
+        from pyvdcapi.templates import TemplateManager, TemplateType
+
+        template_mgr = TemplateManager()
+        ttype = TemplateType.VENDOR_TYPE if template_type == "vendorType" else TemplateType.DEVICE_TYPE
+
+        return template_mgr.save_device_as_template(
+            vdsd=self,
+            template_name=template_name,
+            template_type=ttype,
+            description=description,
+            vendor=vendor,
+            vendor_model_id=vendor_model_id,
+        )
+

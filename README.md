@@ -298,6 +298,52 @@ python -m pytest tests/ --cov=pyvdcapi --cov-report=html
 
 See [tests/README.md](tests/README.md) for detailed test documentation.
 
+## � Device Templates
+
+pyvdcapi includes a **template system** for reusable device configurations. Templates enable:
+- Quick deployment of common device types
+- Consistent configuration across installations
+- Community sharing of device configs
+- Rapid prototyping and testing
+
+### Template Types
+
+**deviceType Templates** - Standard hardware configurations (e.g., simple on/off light, motorized blinds)  
+**vendorType Templates** - Vendor-specific products (e.g., Philips HUE Lily Garden Spot)
+
+### Quick Usage
+
+```python
+# Save configured device as template
+device.save_as_template(
+    template_name="my_custom_light",
+    template_type="deviceType",
+    description="Custom light configuration"
+)
+
+# Create devices from template
+for i in range(1, 6):
+    light = vdc.create_vdsd_from_template(
+        template_name="simple_onoff_light",
+        instance_name=f"Room {i} Light",
+        initial_brightness=0.0
+    )
+```
+
+### Available Templates
+
+**deviceType**:
+- `simple_onoff_light` - Basic on/off light (0-100%)
+- `dimmable_light_with_scenes` - Dimmer with scene presets
+- `wall_switch_single_button` - Single button wall switch
+- `motorized_blinds` - Position-controlled blinds
+- `temperature_humidity_sensor` - Combined climate sensor
+
+**vendorType**:
+- `philips_hue_lily_garden_spot` - Philips HUE RGB+White outdoor spotlight
+
+See **[pyvdcapi/templates/README.md](pyvdcapi/templates/README.md)** for complete template documentation.
+
 ## 📖 Examples
 
 The `examples/` directory contains working demonstrations:
@@ -307,6 +353,7 @@ The `examples/` directory contains working demonstrations:
 - `03_create_clean_vdsd.py` - Complete device setup
 - `04_example_operations.py` - Device operations
 - `05_vdc_utility_methods.py` - Utility methods
+- `06_template_system.py` - **Template system demonstration**
 - `button_input_example.py` - Button with state machine
 - `control_values_heating_demo.py` - Heating control values
 - `demo_with_simulator.py` - Full demo with vdSM simulator
@@ -319,6 +366,7 @@ The `examples/` directory contains working demonstrations:
 Run any example:
 ```bash
 python examples/motion_light_device.py
+python examples/06_template_system.py  # Template demo
 ```
 
 ## 🔌 Hardware Integration Pattern

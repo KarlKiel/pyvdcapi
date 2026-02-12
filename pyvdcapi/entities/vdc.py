@@ -348,6 +348,76 @@ class Vdc:
 
         return vdsd
 
+    def create_vdsd_from_template(
+        self,
+        template_name: str,
+        instance_name: str,
+        template_type: str = "deviceType",
+        enumeration: Optional[int] = None,
+        **instance_params,
+    ) -> "VdSD":
+        """
+        Create a new device instance from a template.
+
+        Templates contain full device configuration (output channels, sensors, etc.)
+        and only require instance-specific information (name, enumeration).
+
+        Args:
+            template_name: Name of the template to use
+            instance_name: Name for the new device instance
+            template_type: "deviceType" (standard) or "vendorType" (vendor-specific)
+            enumeration: Device enumeration number (auto-calculated if not provided)
+            **instance_params: Instance-specific parameters (e.g., initial_brightness=0.0)
+
+        Returns:
+            Configured VdSD instance
+
+        Raises:
+            FileNotFoundError: If template doesn't exist
+
+        Example:
+            # Create from deviceType template
+            light = vdc.create_vdsd_from_template(
+                template_name="simple_onoff_light",
+                instance_name="Kitchen Light",
+                initial_brightness=0.0
+            )
+
+            # Create from vendorType template
+            hue_spot = vdc.create_vdsd_from_template(
+                template_name="philips_hue_lily_spot",
+                instance_name="Garden Spot 1",
+                template_type="vendorType"
+            )
+        """
+        from pyvdcapi.templates import TemplateManager, TemplateType
+
+        # Use auto enumeration if not provided
+        if enumeration is None:
+            enumeration = len(self._vdsds)
+
+        # Create template manager and load template
+        template_mgr = TemplateManager()
+        ttype = TemplateType.VENDOR_TYPE if template_type == "vendorType" else TemplateType.DEVICE_TYPE
+
+        # Create device from template
+        vdsd = template_mgr.create_device_from_template(
+            vdc=self,
+            template_name=template_name,
+            template_type=ttype,
+            instance_name=instance_name,
+            enumeration=enumeration,
+            **instance_params,
+        )
+
+        # Add to collection
+        self._vdsds[vdsd.dsuid] = vdsd
+
+        logger.info(f"Created vdSD from template '{template_name}': {instance_name} (dSUID: {vdsd.dsuid})")
+
+        return vdsd
+
+
     def remove_vdsd(self, dsuid: str) -> bool:
         """
         Remove a device from this vDC.

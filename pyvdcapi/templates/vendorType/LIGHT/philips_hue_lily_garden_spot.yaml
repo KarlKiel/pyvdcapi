@@ -1,0 +1,93 @@
+template_metadata:
+  template_name: "philips_hue_lily_garden_spot"
+  description: "Philips HUE Lily outdoor garden spotlight with RGB+White control"
+  vendor: "Philips"
+  vendor_model_id: "915005730801"
+  created_from_model: "Philips HUE Lily"
+  template_version: "1.0"
+  
+  # Hardware specifications
+  hardware_specs:
+    power: "8W per spot"
+    voltage: "24V DC"
+    connectivity: "Zigbee"
+    ip_rating: "IP65"
+
+device_config:
+  model: "Philips HUE Lily"
+  model_uid: "philips-hue-lily"
+  model_version: "1.0"
+  primary_group: 1  # LIGHT
+  vendor_id: "Philips"
+  
+  instance_parameters:
+    name: REQUIRED
+    enumeration: REQUIRED
+  
+  output:
+    channels:
+      # Brightness channel
+      - channel_type: 1  # BRIGHTNESS
+        min_value: 0.0
+        max_value: 100.0
+        resolution: 0.1
+        initial_value_param: CONFIGURABLE
+      
+      # Hue channel
+      - channel_type: 2  # HUE
+        min_value: 0.0
+        max_value: 360.0
+        resolution: 1.0
+        initial_value_param: CONFIGURABLE
+      
+      # Saturation channel
+      - channel_type: 3  # SATURATION
+        min_value: 0.0
+        max_value: 100.0
+        resolution: 0.1
+        initial_value_param: CONFIGURABLE
+      
+      # Color temperature channel
+      - channel_type: 4  # COLOR_TEMPERATURE
+        min_value: 2000.0  # Warm white
+        max_value: 6500.0  # Cool white
+        resolution: 10.0
+        initial_value_param: CONFIGURABLE
+  
+  # Standard color scenes
+  scenes:
+    # Scene 5: Off
+    5:
+      brightness: 0.0
+    
+    # Scene 14: Warm White
+    14:
+      brightness: 100.0
+      color_temperature: 2700.0
+    
+    # Scene 15: Natural White
+    15:
+      brightness: 100.0
+      color_temperature: 4000.0
+    
+    # Scene 16: Cool White
+    16:
+      brightness: 100.0
+      color_temperature: 6000.0
+    
+    # Scene 17: Full Brightness
+    17:
+      brightness: 100.0
+      hue: 0.0
+      saturation: 0.0
+    
+    # Scene 32: Custom - Warm Evening
+    32:
+      brightness: 60.0
+      hue: 30.0
+      saturation: 80.0
+    
+    # Scene 33: Custom - Cool Focus
+    33:
+      brightness: 85.0
+      color_temperature: 5500.0
