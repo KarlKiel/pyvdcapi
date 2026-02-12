@@ -122,7 +122,7 @@ class Output:
     - output_id: Unique identifier within device
     - output_function: Type of output (dimmer, colordimmer, etc.)
     - output_mode: How output operates (disabled/binary/gradual)
-    - push_changes: Whether to immediately push value changes
+    - push_changes: Always true (outputs always push value changes)
 
     Channel Management:
     - channels: Dictionary of OutputChannel objects by type
@@ -194,7 +194,9 @@ class Output:
         self.vdsd = vdsd
         self.output_function = output_function
         self.output_mode = output_mode
-        self.push_changes = push_changes
+        # Per vDC API usage in this project: outputs ALWAYS push changes
+        # regardless of configuration. Keep push_changes forced to True.
+        self.push_changes = True
 
         # Description properties (API section 4.8.1) - read-only, invariable
         self.default_group = 1  # Default to light group
@@ -375,8 +377,8 @@ class Output:
         # Set the value
         channel.set_value(value, transition_time=transition_time)
 
-        # Trigger push notification if push_changes is enabled
-        if self.push_changes and apply_now:
+        # Outputs ALWAYS push changes (apply_now controls only local echo)
+        if apply_now:
             self._notify_value_change(channel_type, value)
 
         return True
@@ -520,7 +522,7 @@ class Output:
                 "activeGroup": self.active_group,
                 "groups": self.groups,
                 "mode": self._map_mode_to_enum(self.output_mode),
-                "pushChanges": self.push_changes,
+                "pushChanges": True,
                 # Light settings
                 "onThreshold": self.on_threshold,
                 "minBrightness": self.min_brightness,
@@ -560,7 +562,8 @@ class Output:
         if "outputMode" in data:
             self.output_mode = data["outputMode"]
         if "pushChanges" in data:
-            self.push_changes = data["pushChanges"]
+            # Outputs ALWAYS push changes; ignore external disable
+            self.push_changes = True
 
         # Settings properties (section 4.8.2) - DSS → Device (Pattern B)
         # Accept settings nested or top-level
@@ -585,7 +588,8 @@ class Output:
             logger.info(f"Output mode set to {self.output_mode}")
         
         if "pushChanges" in settings:
-            self.push_changes = settings["pushChanges"]
+            # Outputs ALWAYS push changes; ignore external disable
+            self.push_changes = True
         
         # Light settings
         if "onThreshold" in settings:

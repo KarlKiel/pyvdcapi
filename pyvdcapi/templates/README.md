@@ -115,6 +115,13 @@ device.bind_button_input_events(
 
 **Use polling or events depending on your hardware.** Both are supported.
 
+### ✅ Output Channels Always Push
+
+Per vDC documentation (and this implementation), **output channels always push
+value changes**. The `pushChanges` setting is forced to `True` internally and
+ignored if the vdSM tries to disable it. This guarantees that output value
+updates are always notified.
+
 ## Template Types
 
 ### deviceType Templates
