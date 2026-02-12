@@ -237,12 +237,18 @@ Information about the template itself:
 ```yaml
 template_metadata:
   template_name: "simple_onoff_light"
-  description: "Simple on/off light with brightness control (0-100%)"
-  vendor: "ACME"  # Optional, for vendorType
+  description: "Simple on/off light with brightness control (0-100%)"  # Detailed description
+  vendor: "ACME"  # Optional, for vendorType templates
   vendor_model_id: "12345"  # Optional, vendor's model number
-  created_from_model: "OnOff Light"
-  template_version: "1.0"
+  created_from_model: "OnOff Light"  # Model name from original device
 ```
+
+**Field Descriptions**:
+- **template_name**: Template identifier (used when creating devices from template)
+- **description**: Detailed human-readable description of the template's functionality, features, and capabilities. This helps users understand what the template does and when to use it.
+- **vendor**: (Optional) Manufacturer name for vendor-specific templates
+- **vendor_model_id**: (Optional) Manufacturer's model/part number
+- **created_from_model**: Original device model name this template was created from
 
 ### device_config
 Complete device configuration:
@@ -310,11 +316,20 @@ device = vdc.create_vdsd(name="MyDevice", model="OnOff Light", primary_group=1)
 output = device.create_output()
 output.add_output_channel(channel_type=1, min_value=0.0, max_value=100.0)
 
-# Save as template
+# Save as template with detailed description
 template_path = device.save_as_template(
     template_name="my_custom_light",
     template_type="deviceType",  # or "vendorType"
-    description="My custom light configuration",
+    description="Custom dimmable light with temperature sensor and manual override button",
+)
+
+# For vendor-specific templates, add vendor information
+template_path = device.save_as_template(
+    template_name="philips_hue_white_ambiance",
+    template_type="vendorType",
+    description="Philips Hue White Ambiance bulb with color temperature control (2200K-6500K)",
+    vendor="Philips",
+    vendor_model_id="8718696548738",
 )
 ```
 
@@ -590,11 +605,33 @@ To use a shared template:
 ### Best Practices
 
 1. **Use descriptive names**: `motorized_blinds` not `blinds1`
-2. **Include clear descriptions**: Explain what the template configures
+2. **Write detailed descriptions**: Explain device functionality, features, and capabilities
+   - ✅ Good: "RGB color light with brightness (0-100%), hue (0-360°), saturation (0-100%), and color temperature (2200K-6500K)"
+   - ❌ Poor: "Light template"
 3. **Set sensible defaults**: Choose default values that work for most cases
 4. **Document special features**: Note any unique capabilities in metadata
 5. **Test thoroughly**: Create multiple instances to verify template works
-6. **Version your templates**: Use `template_version` to track changes
+6. **Include vendor details** (for vendorType): Add vendor name and model ID for easy identification
+
+#### Writing Good Template Descriptions
+
+The `description` field in `template_metadata` should help users understand:
+- **What** the device is (type and purpose)
+- **What it can do** (channels, inputs, sensors)
+- **How it works** (ranges, special features)
+- **When to use it** (vendor-specific models, use cases)
+
+**Examples**:
+```python
+# deviceType template
+description="Dimmable light with brightness control (0-100%), supports smooth transitions and scene recall"
+
+# vendorType template  
+description="Philips Hue White Ambiance bulb with color temperature control (2200K-6500K), smooth dimming, and scene support"
+
+# Complex device
+description="Multi-sensor device with temperature (-20°C to 60°C), humidity (0-100%), and motion detection, configurable push intervals"
+```
 
 ## Channel Types Reference
 
