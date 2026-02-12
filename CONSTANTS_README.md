@@ -109,20 +109,32 @@ Standard channel types for device outputs:
 
 ## Groups (Functional Classes)
 
-digitalSTROM groups represent functional device classes, identified by color:
+digitalSTROM groups represent functional device classes. Each group has an ID and is associated with a color for UI purposes. Note that multiple groups can share the same color (especially BLUE).
 
-| Group | Color | Name | Description |
-|-------|-------|------|-------------|
-| 0 | - | UNDEFINED | Not assigned |
-| 1 | Yellow | LIGHT | Light/Illumination devices |
-| 2 | Gray | BLINDS | Blinds/Shades/Jalousies |
-| 3 | Blue | HEATING | Heating devices |
-| 4 | Cyan | AUDIO | Audio devices |
-| 5 | Magenta | VIDEO | Video devices |
-| 6 | Red | SECURITY | Security/Access control |
-| 7 | Green | ACCESS | Access control |
-| 8 | Black | JOKER | Multi-purpose/Joker |
-| 9 | White | COOLING | Cooling devices |
+| Group ID | Name | Color | Description |
+|----------|------|-------|-------------|
+| 0 | UNDEFINED | White | Not assigned / Single device |
+| 1 | LIGHT | Yellow | Light/Illumination devices |
+| 2 | BLINDS | Gray | Blinds/Shades/Jalousies |
+| 3 | HEATING | Blue | Heating devices |
+| 4 | AUDIO | Cyan | Audio devices |
+| 5 | VIDEO | Magenta | Video devices |
+| 6 | SECURITY | Red | Security devices |
+| 7 | ACCESS | Green | Access control |
+| 8 | JOKER | Black | Multi-purpose/Joker |
+| 9 | COOLING | Blue | Cooling devices |
+| 10 | VENTILATION | Blue | Ventilation devices |
+| 11 | WINDOW | Blue | Window devices |
+| 12 | RECIRCULATION | Blue | Recirculation devices |
+| 48 | TEMPERATURE_CONTROL | Blue | Temperature control devices |
+| 64 | APARTMENT_VENTILATION | Blue | Apartment ventilation devices |
+
+**Important Notes:**
+- Multiple group IDs can share the same color (e.g., groups 3, 9, 10, 11, 12, 48, and 64 all use BLUE)
+- Use `DSGroup.LIGHT`, `DSGroup.HEATING`, etc. for group IDs in code
+- Backwards compatibility: Color-based names (YELLOW, BLUE, etc.) are still available but deprecated
+- Use `get_group_color(group_id)` to get the color for a specific group ID
+- Use `get_group_name(group_id)` to get the function name for a specific group ID
 
 ## Scene Effects
 
@@ -328,7 +340,7 @@ from pyvdcapi.core.constants import (
     DSScene, DSChannelType, DSGroup, DSSceneEffect,
     DSSensorType, DSButtonClickType, DSErrorState,
     DSOutputFunction, DSOutputMode,
-    get_channel_name, get_group_name, get_default_scene_config
+    get_channel_name, get_group_name, get_group_color, get_default_scene_config
 )
 
 # Check scene number
@@ -344,9 +356,19 @@ config = get_default_scene_config(DSScene.WAKE_UP)
 #     "dontCare": False
 # }
 
+# Group usage - use functional names (recommended)
+group_name = get_group_name(DSGroup.LIGHT)  # "Light"
+group_color = get_group_color(DSGroup.LIGHT)  # "YELLOW"
+group_name = get_group_name(DSGroup.HEATING)  # "Heating"
+group_color = get_group_color(DSGroup.HEATING)  # "BLUE"
+group_name = get_group_name(DSGroup.COOLING)  # "Cooling"
+group_color = get_group_color(DSGroup.COOLING)  # "BLUE" (same as HEATING!)
+
+# Backwards compatibility - color names still work (deprecated)
+group_name = get_group_name(DSGroup.YELLOW)  # "Light" (same as DSGroup.LIGHT)
+
 # Channel type names
 channel_name = get_channel_name(DSChannelType.BRIGHTNESS)  # "brightness"
-group_name = get_group_name(DSGroup.YELLOW)  # "Light"
 
 # Sensor type usage
 sensor = {

@@ -129,7 +129,7 @@ async def main():
     living_room = lights.create_vdsd(
         name="Living Room Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW  # Yellow = Lights!
+        primary_group=DSGroup.LIGHT  # Light group (ID=1, Color=Yellow)
     )
     
     # 4. Add output channel
@@ -165,13 +165,13 @@ if __name__ == "__main__":
 ### Critical Rules
 
 ❌ **DON'T:**
-- Use `DSGroup.LIGHT` (doesn't exist)
+- Use color names for groups (e.g., `DSGroup.YELLOW`) - deprecated!
 - Write callbacks with 1 parameter: `def callback(value)`
 - Call methods that don't exist (check docs!)
 - Forget `await` on async functions
 
 ✅ **DO:**
-- Use `DSGroup.YELLOW` (value=1) for lights
+- Use function names for groups: `DSGroup.LIGHT` (value=1, color=Yellow)
 - Write callbacks with 2 parameters: `def callback(channel_type, value)`
 - Check [API_REFERENCE.md](API_REFERENCE.md) for method signatures
 - Use `await` with `start()`, `stop()`, etc.
@@ -248,7 +248,7 @@ async def main():
     rgb = vdc.create_vdsd(
         name="Desk Lamp",
         model="RGB LED Strip",
-        primary_group=DSGroup.YELLOW
+        primary_group=DSGroup.LIGHT
     )
     
     # Add THREE channels for full color
@@ -469,11 +469,19 @@ Check [ISSUES.md](ISSUES.md) for tasks:
 ### Essential Constants
 
 ```python
-# Device Groups (Colors)
-DSGroup.YELLOW = 1   # Lights (NOT .LIGHT!)
-DSGroup.GRAY = 2     # Blinds/Shades
-DSGroup.BLUE = 3     # Heating
-DSGroup.CYAN = 4     # Audio
+# Device Groups (Use functional names)
+DSGroup.LIGHT = 1           # Lights (Yellow)
+DSGroup.BLINDS = 2          # Blinds/Shades (Gray)
+DSGroup.HEATING = 3         # Heating (Blue)
+DSGroup.AUDIO = 4           # Audio (Cyan)
+DSGroup.COOLING = 9         # Cooling (Blue)
+DSGroup.VENTILATION = 10    # Ventilation (Blue)
+# ... and more (see CONSTANTS_README.md)
+
+# Backwards compatibility (deprecated - use functional names)
+DSGroup.YELLOW = 1   # Same as DSGroup.LIGHT
+DSGroup.GRAY = 2     # Same as DSGroup.BLINDS
+DSGroup.BLUE = 3     # Same as DSGroup.HEATING
 
 # Channel Types
 DSChannelType.BRIGHTNESS = 1
