@@ -63,7 +63,7 @@ async def create_demo_setup():
         name="Living Room Ceiling Light",
         model="SmartBulb Pro",
         model_uid="smartbulb-pro",
-        primary_group=DSGroup.YELLOW,  # Light group
+        primary_group=DSGroup.LIGHT,  # Light group
         displayId="LR-CEIL-001",
         vendorName="Demo Lights Inc",
     )
@@ -86,7 +86,7 @@ async def create_demo_setup():
         name="Bedroom RGB Strip",
         model="ColorStrip Max",
         model_uid="colorstrip-max",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         displayId="BR-RGB-001",
         vendorName="Demo Lights Inc",
     )
@@ -113,7 +113,7 @@ async def create_demo_setup():
         name="Kitchen Multisensor",
         model="SensorHub v2",
         model_uid="sensorhub-v2",
-        primary_group=DSGroup.BLACK,  # Joker/generic
+        primary_group=DSGroup.JOKER,  # Joker/generic
         displayId="KITCHEN-SENS-001",
         vendorName="Demo Sensors Co",
     )

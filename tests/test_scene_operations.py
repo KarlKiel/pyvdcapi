@@ -57,7 +57,7 @@ async def test_scene_save_and_call():
         vdc=MockVdC(),
         name="Test Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:01",
         vendor_id="TestVendor"
     )
@@ -109,7 +109,7 @@ async def test_scene_undo():
         vdc=MockVdC(),
         name="Test Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:02",
         vendor_id="TestVendor"
     )
@@ -154,7 +154,7 @@ async def test_scene_multi_channel():
         vdc=MockVdC(),
         name="Color Light",
         model="RGB Bulb",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:03",
         vendor_id="TestVendor"
     )
@@ -223,7 +223,7 @@ async def test_scene_undo_stack_depth():
         vdc=MockVdC(),
         name="Test Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:04",
         vendor_id="TestVendor"
     )
@@ -280,7 +280,7 @@ async def test_scene_call_min_mode():
         vdc=MockVdC(),
         name="Test Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:05",
         vendor_id="TestVendor"
     )
@@ -325,7 +325,7 @@ async def test_scene_persistence():
         vdc=MockVdC(),
         name="Test Light",
         model="Dimmer",
-        primary_group=DSGroup.YELLOW,
+        primary_group=DSGroup.LIGHT,
         mac_address="00:11:22:33:44:06",
         vendor_id="TestVendor"
     )
